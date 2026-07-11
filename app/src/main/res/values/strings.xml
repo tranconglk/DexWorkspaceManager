@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">DexWorkspaceManager</string>
+    <string name="home_title">Dex Workspace</string>
+    <string name="launch">Launch</string>
+    <string name="new_layout">New Layout</string>
+    <string name="saved_layouts">Saved Layouts</string>
+    <string name="settings">Settings</string>
+</resources>
