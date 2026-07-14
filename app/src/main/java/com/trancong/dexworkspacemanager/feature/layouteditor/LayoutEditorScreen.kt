@@ -65,6 +65,7 @@ fun LayoutEditorRoute(
     val viewModelFactory = remember(application, workspaceId) {
         LayoutEditorViewModelFactory(
             workspaceRepository = application.container.workspaceRepository,
+            appLauncher = application.container.appLauncher,
             workspaceId = workspaceId
         )
     }
@@ -115,6 +116,7 @@ fun LayoutEditorRoute(
             appAssignments = uiState.appAssignments,
             onZoneClick = onZoneClick,
             onRemoveAppFromZone = viewModel::removeAppFromZone,
+            onLaunchAppForZone = viewModel::launchAssignedApp,
             onBackClick = onBackClick,
             workspaceName = uiState.workspaceName,
             onWorkspaceNameChange = viewModel::updateWorkspaceName,
@@ -122,11 +124,15 @@ fun LayoutEditorRoute(
             isSaving = uiState.isSaving,
             saveMessage = uiState.saveMessage,
             saveError = uiState.saveError,
+            launchMessage = uiState.launchMessage,
+            launchError = uiState.launchError,
             onSaveClick = viewModel::showSaveDialog,
             onConfirmSave = viewModel::saveWorkspace,
             onDismissSaveDialog = viewModel::hideSaveDialog,
             onSaveMessageShown = viewModel::consumeSaveMessage,
-            onSaveErrorShown = viewModel::consumeSaveError
+            onSaveErrorShown = viewModel::consumeSaveError,
+            onLaunchMessageShown = viewModel::consumeLaunchMessage,
+            onLaunchErrorShown = viewModel::consumeLaunchError
         )
     }
 }
@@ -179,6 +185,7 @@ fun LayoutEditorScreen(
     appAssignments: Map<String, ZoneAppAssignment>,
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
+    onLaunchAppForZone: (String) -> Unit,
     onBackClick: () -> Unit,
     workspaceName: String,
     onWorkspaceNameChange: (String) -> Unit,
@@ -186,11 +193,15 @@ fun LayoutEditorScreen(
     isSaving: Boolean,
     saveMessage: String?,
     saveError: String?,
+    launchMessage: String?,
+    launchError: String?,
     onSaveClick: () -> Unit,
     onConfirmSave: () -> Unit,
     onDismissSaveDialog: () -> Unit,
     onSaveMessageShown: () -> Unit,
     onSaveErrorShown: () -> Unit,
+    onLaunchMessageShown: () -> Unit,
+    onLaunchErrorShown: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -211,6 +222,20 @@ fun LayoutEditorScreen(
         saveError?.let { error ->
             snackbarHostState.showSnackbar(error)
             onSaveErrorShown()
+        }
+    }
+
+    LaunchedEffect(launchMessage) {
+        launchMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            onLaunchMessageShown()
+        }
+    }
+
+    LaunchedEffect(launchError) {
+        launchError?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            onLaunchErrorShown()
         }
     }
 
@@ -289,6 +314,7 @@ fun LayoutEditorScreen(
                     appAssignments = appAssignments,
                     onZoneClick = onZoneClick,
                     onRemoveAppFromZone = onRemoveAppFromZone,
+                    onLaunchAppForZone = onLaunchAppForZone,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -368,6 +394,7 @@ private fun LayoutPreview(
     appAssignments: Map<String, ZoneAppAssignment>,
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
+    onLaunchAppForZone: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -397,6 +424,7 @@ private fun LayoutPreview(
                         assignment = appAssignments[zone.id],
                         onClick = { onZoneClick(zone.id) },
                         onRemoveClick = { onRemoveAppFromZone(zone.id) },
+                        onLaunchClick = { onLaunchAppForZone(zone.id) },
                         modifier = Modifier
                             .offset(
                                 x = maxWidth * zone.x,
@@ -477,6 +505,7 @@ private fun PreviewZone(
     assignment: ZoneAppAssignment?,
     onClick: () -> Unit,
     onRemoveClick: () -> Unit,
+    onLaunchClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -507,8 +536,16 @@ private fun PreviewZone(
                     text = assignment.packageName,
                     style = MaterialTheme.typography.bodySmall
                 )
-                IconButton(onClick = onRemoveClick) {
-                    Icon(Icons.Default.Close, contentDescription = "Xóa ứng dụng khỏi ${zone.label}")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onLaunchClick) {
+                        Text("Mở thử")
+                    }
+                    IconButton(onClick = onRemoveClick) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Xóa ứng dụng khỏi ${zone.label}"
+                        )
+                    }
                 }
             }
         }
@@ -531,6 +568,7 @@ private fun LayoutEditorScreenPreview() {
             appAssignments = emptyMap(),
             onZoneClick = {},
             onRemoveAppFromZone = {},
+            onLaunchAppForZone = {},
             onBackClick = {},
             workspaceName = "Workspace của tôi",
             onWorkspaceNameChange = {},
@@ -538,11 +576,15 @@ private fun LayoutEditorScreenPreview() {
             isSaving = false,
             saveMessage = null,
             saveError = null,
+            launchMessage = null,
+            launchError = null,
             onSaveClick = {},
             onConfirmSave = {},
             onDismissSaveDialog = {},
             onSaveMessageShown = {},
-            onSaveErrorShown = {}
+            onSaveErrorShown = {},
+            onLaunchMessageShown = {},
+            onLaunchErrorShown = {}
         )
     }
 }

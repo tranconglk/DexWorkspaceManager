@@ -5,12 +5,15 @@ import androidx.room.Room
 import com.trancong.dexworkspacemanager.data.local.database.AppDatabase
 import com.trancong.dexworkspacemanager.data.repository.WorkspaceRepositoryImpl
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
+import com.trancong.dexworkspacemanager.platform.applauncher.AndroidAppLauncher
+import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import com.trancong.dexworkspacemanager.platform.installedapps.AndroidInstalledAppsProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppsProvider
 
 interface AppContainer {
     val workspaceRepository: WorkspaceRepository
     val installedAppsProvider: InstalledAppsProvider
+    val appLauncher: AppLauncher
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -25,4 +28,6 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val installedAppsProvider: InstalledAppsProvider =
         AndroidInstalledAppsProvider(context)
+
+    override val appLauncher: AppLauncher = AndroidAppLauncher(context)
 }

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
+import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
+import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class LayoutEditorViewModel(
     private val workspaceRepository: WorkspaceRepository,
+    private val appLauncher: AppLauncher,
     workspaceId: Long?
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LayoutEditorUiState())
@@ -66,6 +69,56 @@ class LayoutEditorViewModel(
         _uiState.update { currentState ->
             currentState.copy(appAssignments = currentState.appAssignments - zoneId)
         }
+    }
+
+    fun launchAssignedApp(zoneId: String) {
+        val assignment = _uiState.value.appAssignments[zoneId]
+        if (assignment == null) {
+            _uiState.update {
+                it.copy(
+                    launchMessage = null,
+                    launchError = "Vùng này chưa được gán ứng dụng"
+                )
+            }
+            return
+        }
+
+        val result = appLauncher.launch(
+            packageName = assignment.packageName,
+            activityName = assignment.activityName
+        )
+        _uiState.update { currentState ->
+            when (result) {
+                AppLaunchResult.Success -> currentState.copy(
+                    launchMessage = "Đã mở ${assignment.appLabel}",
+                    launchError = null
+                )
+                AppLaunchResult.AppNotFound -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Ứng dụng không còn được cài đặt"
+                )
+                AppLaunchResult.ActivityNotFound -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Không tìm thấy màn hình khởi chạy của ứng dụng"
+                )
+                AppLaunchResult.SecurityError -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Không có quyền mở ứng dụng này"
+                )
+                is AppLaunchResult.UnknownError -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Không thể mở ứng dụng. Vui lòng thử lại"
+                )
+            }
+        }
+    }
+
+    fun consumeLaunchMessage() {
+        _uiState.update { it.copy(launchMessage = null) }
+    }
+
+    fun consumeLaunchError() {
+        _uiState.update { it.copy(launchError = null) }
     }
 
     fun showSaveDialog() {
