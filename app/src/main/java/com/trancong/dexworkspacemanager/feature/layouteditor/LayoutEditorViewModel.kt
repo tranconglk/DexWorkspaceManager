@@ -2,6 +2,8 @@ package com.trancong.dexworkspacemanager.feature.layouteditor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.trancong.dexworkspacemanager.data.mapper.toDomain
+import com.trancong.dexworkspacemanager.data.mapper.toEditorAssignment
 import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
@@ -33,7 +35,15 @@ class LayoutEditorViewModel(
 
     fun selectTemplate(template: LayoutTemplate) {
         _uiState.update { currentState ->
-            currentState.copy(selectedTemplate = template)
+            val validZoneIds = LayoutTemplates.zonesFor(
+                template = template,
+                leftRatio = currentState.leftRatio,
+                topRatio = currentState.topRatio
+            ).mapTo(mutableSetOf(), LayoutZone::id)
+            currentState.copy(
+                selectedTemplate = template,
+                appAssignments = currentState.appAssignments.filterKeys(validZoneIds::contains)
+            )
         }
     }
 
@@ -51,7 +61,10 @@ class LayoutEditorViewModel(
 
     fun resetLayout() {
         _uiState.update { currentState ->
-            currentState.copy(selectedTemplate = LayoutTemplate.EMPTY)
+            currentState.copy(
+                selectedTemplate = LayoutTemplate.EMPTY,
+                appAssignments = emptyMap()
+            )
         }
     }
 
@@ -295,7 +308,8 @@ class LayoutEditorViewModel(
             leftRatio = currentState.leftRatio,
             topRatio = currentState.topRatio,
             createdAt = createdAt,
-            updatedAt = timestamp
+            updatedAt = timestamp,
+            appAssignments = currentState.appAssignments.values.map { it.toDomain() }
         )
 
         _uiState.update {
@@ -380,6 +394,9 @@ class LayoutEditorViewModel(
                             selectedTemplate = workspace.template,
                             leftRatio = workspace.leftRatio,
                             topRatio = workspace.topRatio,
+                            appAssignments = workspace.appAssignments
+                                .map { it.toEditorAssignment() }
+                                .associateBy(ZoneAppAssignment::zoneId),
                             isLoadingWorkspace = false,
                             loadError = null
                         )

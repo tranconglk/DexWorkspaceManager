@@ -9,7 +9,8 @@ data class Workspace(
     val leftRatio: Float,
     val topRatio: Float,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val appAssignments: List<WorkspaceAppAssignment> = emptyList()
 ) {
     init {
         require(name.isNotBlank()) { "Workspace name must not be blank." }
