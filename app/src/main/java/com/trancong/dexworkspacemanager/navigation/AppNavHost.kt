@@ -6,7 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.trancong.dexworkspacemanager.feature.home.HomeScreen
 import com.trancong.dexworkspacemanager.feature.layouteditor.LayoutEditorRoute
-import com.trancong.dexworkspacemanager.feature.savedlayouts.SavedLayoutsScreen
+import com.trancong.dexworkspacemanager.feature.savedlayouts.SavedLayoutsRoute
 
 @Composable
 fun AppNavHost() {
@@ -30,7 +30,10 @@ fun AppNavHost() {
             LayoutEditorRoute(onBackClick = navController::popBackStack)
         }
         composable(AppRoute.SavedLayouts.route) {
-            SavedLayoutsScreen(onBackClick = navController::popBackStack)
+            SavedLayoutsRoute(
+                onBackClick = navController::popBackStack,
+                onWorkspaceClick = {}
+            )
         }
     }
 }
