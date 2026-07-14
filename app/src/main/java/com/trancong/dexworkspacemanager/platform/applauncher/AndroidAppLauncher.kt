@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.os.Build
+import android.graphics.Rect
 import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
 
 class AndroidAppLauncher(context: Context) : AppLauncher {
@@ -117,23 +118,82 @@ class AndroidAppLauncher(context: Context) : AppLauncher {
         }
     }
 
+    override fun launchOnDisplayWithBounds(
+        packageName: String,
+        activityName: String,
+        displayId: Int,
+        bounds: LaunchBounds
+    ): AppLaunchResult {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return AppLaunchResult.MultiDisplayNotSupported
+        }
+        if (!packageManager.hasSystemFeature(
+                PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
+            )
+        ) return AppLaunchResult.MultiDisplayNotSupported
+
+        val displayManager = applicationContext.getSystemService(Context.DISPLAY_SERVICE)
+            as DisplayManager
+        if (displayManager.getDisplay(displayId) == null) {
+            return AppLaunchResult.DisplayNotAvailable
+        }
+        try {
+            verifyPackageExists(packageName)
+        } catch (exception: PackageManager.NameNotFoundException) {
+            return AppLaunchResult.AppNotFound
+        } catch (exception: SecurityException) {
+            return AppLaunchResult.SecurityError
+        } catch (exception: Exception) {
+            return AppLaunchResult.UnknownError(exception.message)
+        }
+        val component = ComponentName(packageName, activityName)
+        try {
+            verifyActivityExists(component)
+        } catch (exception: PackageManager.NameNotFoundException) {
+            return AppLaunchResult.ActivityNotFound
+        } catch (exception: SecurityException) {
+            return AppLaunchResult.SecurityError
+        } catch (exception: Exception) {
+            return AppLaunchResult.UnknownError(exception.message)
+        }
+        return try {
+            val options = ActivityOptions.makeBasic().apply {
+                launchDisplayId = displayId
+                launchBounds = Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            }
+            val intent = createLaunchIntent(component).apply {
+                addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            }
+            applicationContext.startActivity(intent, options.toBundle())
+            AppLaunchResult.Success
+        } catch (exception: IllegalArgumentException) {
+            AppLaunchResult.InvalidBounds
+        } catch (exception: ActivityNotFoundException) {
+            AppLaunchResult.ActivityNotFound
+        } catch (exception: SecurityException) {
+            AppLaunchResult.LaunchNotAllowedOnDisplay
+        } catch (exception: Exception) {
+            AppLaunchResult.UnknownError(exception.message)
+        }
+    }
+
     override fun launchWithMode(
         packageName: String,
         activityName: String,
         mode: DexLaunchMode,
         displayId: Int?
     ): AppLaunchResult = when (mode) {
-        DexLaunchMode.MODERN_DISPLAY_API -> {
+        DexLaunchMode.TARGET_DISPLAY_API -> {
             if (displayId == null) {
                 AppLaunchResult.DisplayNotAvailable
             } else {
                 launchOnDisplay(packageName, activityName, displayId)
             }
         }
-        DexLaunchMode.LEGACY_CURRENT_DISPLAY -> AppLaunchResult.UnknownError(
-            "Legacy launch requires the current foreground Activity"
+        DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS -> AppLaunchResult.UnknownError(
+            "Current-display launch requires the foreground Activity"
         )
-        DexLaunchMode.DEFAULT_DISPLAY -> launch(packageName, activityName)
+        DexLaunchMode.DEFAULT_ACTIVITY -> launch(packageName, activityName)
     }
 
     private fun verifyPackageExists(packageName: String) {

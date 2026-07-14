@@ -8,4 +8,12 @@ interface ForegroundAppLauncher {
         packageName: String,
         activityName: String
     ): AppLaunchResult
+
+    fun launchFromActivityWithBounds(
+        activity: Activity,
+        packageName: String,
+        activityName: String,
+        bounds: LaunchBounds,
+        strategy: LaunchStrategy = LaunchStrategy.STANDARD_BOUNDS
+    ): AppLaunchResult
 }

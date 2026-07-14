@@ -8,5 +8,7 @@ sealed interface AppLaunchResult {
     data object DisplayNotAvailable : AppLaunchResult
     data object LaunchNotAllowedOnDisplay : AppLaunchResult
     data object MultiDisplayNotSupported : AppLaunchResult
+    data object BoundsNotSupported : AppLaunchResult
+    data object InvalidBounds : AppLaunchResult
     data class UnknownError(val message: String?) : AppLaunchResult
 }

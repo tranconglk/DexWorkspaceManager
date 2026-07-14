@@ -1,11 +1,9 @@
 package com.trancong.dexworkspacemanager.platform.dex
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.util.DisplayMetrics
 import android.view.Display
-import android.os.Build
 
 class AndroidDexDisplayProvider(context: Context) : DexDisplayProvider {
     private val applicationContext = context.applicationContext
@@ -54,26 +52,27 @@ class AndroidDexDisplayProvider(context: Context) : DexDisplayProvider {
             DexDisplayState.NotConnected,
             is DexDisplayState.Error -> false
         }
-        if (!hasExternalDisplay) return DexLaunchMode.DEFAULT_DISPLAY
-
-        val supportsSecondaryActivities = applicationContext.packageManager.hasSystemFeature(
-            PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS
-        )
-        val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
-        val isOldAndroidGeneration = Build.VERSION.SDK_INT < MODERN_DISPLAY_API_MIN_SDK
-        val isLegacySamsungGeneration = isSamsung &&
-            Build.VERSION.SDK_INT <= LEGACY_SAMSUNG_MAX_SDK
-
-        return if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            supportsSecondaryActivities &&
-            !isOldAndroidGeneration &&
-            !isLegacySamsungGeneration
-        ) {
-            DexLaunchMode.MODERN_DISPLAY_API
+        return if (hasExternalDisplay) {
+            DexLaunchMode.TARGET_DISPLAY_API
         } else {
-            DexLaunchMode.LEGACY_CURRENT_DISPLAY
+            DexLaunchMode.DEFAULT_ACTIVITY
         }
+    }
+
+    override fun getRecommendedWorkArea(): DexWorkArea? {
+        val displays = try {
+            getExternalDisplays()
+        } catch (exception: Exception) {
+            return null
+        }
+        val display = displays.singleOrNull { it.isLikelyDexDisplay }
+            ?: displays.singleOrNull()
+            ?: return null
+        return DexWorkArea(
+            width = display.width,
+            height = display.height,
+            bottomInset = 0 // Experimental: public Display APIs do not expose the DeX taskbar inset.
+        )
     }
 
     @Suppress("DEPRECATION")
@@ -95,7 +94,5 @@ class AndroidDexDisplayProvider(context: Context) : DexDisplayProvider {
 
     private companion object {
         val DEX_NAME_HINTS = listOf("dex", "desktop", "external", "hdmi")
-        const val MODERN_DISPLAY_API_MIN_SDK = Build.VERSION_CODES.S
-        const val LEGACY_SAMSUNG_MAX_SDK = Build.VERSION_CODES.R
     }
 }

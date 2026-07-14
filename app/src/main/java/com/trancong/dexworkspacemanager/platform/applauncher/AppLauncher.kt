@@ -14,6 +14,13 @@ interface AppLauncher {
         displayId: Int
     ): AppLaunchResult
 
+    fun launchOnDisplayWithBounds(
+        packageName: String,
+        activityName: String,
+        displayId: Int,
+        bounds: LaunchBounds
+    ): AppLaunchResult
+
     fun launchWithMode(
         packageName: String,
         activityName: String,

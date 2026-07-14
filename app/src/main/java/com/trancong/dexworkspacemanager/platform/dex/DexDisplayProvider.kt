@@ -4,4 +4,5 @@ interface DexDisplayProvider {
     fun getCurrentState(): DexDisplayState
     fun getExternalDisplays(): List<ExternalDisplayInfo>
     fun determineRecommendedLaunchMode(): DexLaunchMode
+    fun getRecommendedWorkArea(): DexWorkArea?
 }

@@ -9,6 +9,7 @@ import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
 import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
+import com.trancong.dexworkspacemanager.platform.dex.DexWindowLaunchStrategy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +123,14 @@ class LayoutEditorViewModel(
                     launchMessage = null,
                     launchError = "Thiết bị hoặc ROM không hỗ trợ mở Activity trên màn hình phụ"
                 )
+                AppLaunchResult.BoundsNotSupported -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "ROM không hỗ trợ đặt vị trí cửa sổ khi mở"
+                )
+                AppLaunchResult.InvalidBounds -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Kích thước vùng không hợp lệ"
+                )
                 is AppLaunchResult.UnknownError -> currentState.copy(
                     launchMessage = null,
                     launchError = "Không thể mở ứng dụng. Vui lòng thử lại"
@@ -151,7 +160,15 @@ class LayoutEditorViewModel(
             currentState.copy(
                 dexDisplayState = state,
                 selectedExternalDisplayId = selectedDisplayId,
-                recommendedDexLaunchMode = recommendedMode
+                recommendedDexLaunchMode = recommendedMode,
+                canLaunchOnDex = recommendedMode != DexLaunchMode.DEFAULT_ACTIVITY,
+                dexLaunchDescription = when (recommendedMode) {
+                    DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS ->
+                        "Đang chạy trực tiếp trên màn hình DeX"
+                    DexLaunchMode.TARGET_DISPLAY_API ->
+                        "Đang chạy trên điện thoại, sẽ gửi sang display DeX"
+                    DexLaunchMode.DEFAULT_ACTIVITY -> "Chưa phát hiện DeX"
+                }
             )
         }
     }
@@ -181,7 +198,7 @@ class LayoutEditorViewModel(
             }
             return
         }
-        if (currentState.recommendedDexLaunchMode != DexLaunchMode.MODERN_DISPLAY_API) {
+        if (currentState.recommendedDexLaunchMode != DexLaunchMode.TARGET_DISPLAY_API) {
             reportLaunchError("Chưa phát hiện màn hình DeX có thể mở bằng API display")
             return
         }
@@ -219,6 +236,14 @@ class LayoutEditorViewModel(
                     launchMessage = null,
                     launchError = "Thiết bị hoặc ROM không hỗ trợ mở Activity trên màn hình phụ"
                 )
+                AppLaunchResult.BoundsNotSupported -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "ROM không hỗ trợ đặt vị trí cửa sổ khi mở"
+                )
+                AppLaunchResult.InvalidBounds -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Kích thước vùng không hợp lệ"
+                )
                 AppLaunchResult.AppNotFound -> latestState.copy(
                     launchMessage = null,
                     launchError = "Ứng dụng không còn được cài đặt"
@@ -239,8 +264,75 @@ class LayoutEditorViewModel(
         }
     }
 
+    fun handleBoundsLaunchResult(result: AppLaunchResult) {
+        if (result == AppLaunchResult.Success) {
+            _uiState.update {
+                it.copy(
+                    launchMessage = "Đã yêu cầu mở ứng dụng trong vùng",
+                    launchError = null
+                )
+            }
+        } else {
+            handleDexLaunchResult(result)
+        }
+    }
+
     fun reportLaunchError(message: String) {
         _uiState.update { it.copy(launchMessage = null, launchError = message) }
+    }
+
+    fun selectTestStrategy(strategy: DexWindowLaunchStrategy) {
+        _uiState.update { it.copy(selectedTestStrategy = strategy) }
+    }
+
+    fun handleCompatibilityResult(
+        strategy: DexWindowLaunchStrategy,
+        result: AppLaunchResult
+    ) {
+        val strategyName = when (strategy) {
+            DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS -> "API màn hình đích"
+            DexWindowLaunchStrategy.LEGACY_NEW_TASK_AND_BOUNDS -> "Task mới từ DeX"
+        }
+        if (result == AppLaunchResult.Success) {
+            _uiState.update {
+                it.copy(
+                    lastCompatibilityMessage = "Đã gửi yêu cầu mở bằng $strategyName",
+                    lastCompatibilityError = null
+                )
+            }
+        } else {
+            val error = when (result) {
+                AppLaunchResult.DisplayNotAvailable -> "Chưa xác định được display DeX"
+                AppLaunchResult.AppNotFound -> "Ứng dụng không còn được cài đặt"
+                AppLaunchResult.ActivityNotFound -> "Không tìm thấy màn hình khởi chạy"
+                AppLaunchResult.SecurityError,
+                AppLaunchResult.LaunchNotAllowedOnDisplay ->
+                    "Hệ thống không cho phép phép thử này"
+                AppLaunchResult.MultiDisplayNotSupported ->
+                    "Thiết bị không hỗ trợ Activity trên màn hình phụ"
+                AppLaunchResult.BoundsNotSupported -> "ROM không hỗ trợ launch bounds"
+                AppLaunchResult.InvalidBounds -> "Kích thước vùng không hợp lệ"
+                is AppLaunchResult.UnknownError -> "Không thể thực hiện phép thử"
+                AppLaunchResult.Success -> return
+            }
+            _uiState.update {
+                it.copy(lastCompatibilityMessage = null, lastCompatibilityError = error)
+            }
+        }
+    }
+
+    fun reportCompatibilityError(message: String) {
+        _uiState.update {
+            it.copy(lastCompatibilityMessage = null, lastCompatibilityError = message)
+        }
+    }
+
+    fun consumeCompatibilityMessage() {
+        _uiState.update { it.copy(lastCompatibilityMessage = null) }
+    }
+
+    fun consumeCompatibilityError() {
+        _uiState.update { it.copy(lastCompatibilityError = null) }
     }
 
     fun consumeLaunchMessage() {
