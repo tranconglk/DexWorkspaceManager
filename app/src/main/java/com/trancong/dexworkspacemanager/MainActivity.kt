@@ -1,7 +1,6 @@
 package com.trancong.dexworkspacemanager
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,12 +14,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             DexWorkspaceManagerTheme {
                 HomeScreen(
-                    onCreateLayoutClick = {
-                        Toast.makeText(this, "Tạo bố cục mới", Toast.LENGTH_SHORT).show()
-                    },
-                    onSavedLayoutsClick = {
-                        Toast.makeText(this, "Bố cục đã lưu", Toast.LENGTH_SHORT).show()
-                    }
+                    onCreateLayoutClick = {},
+                    onSavedLayoutsClick = {}
                 )
             }
         }
