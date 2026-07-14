@@ -22,16 +22,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,14 +47,18 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
 fun LayoutEditorRoute(
-    onBackClick: () -> Unit,
-    onSaveClick: () -> Unit = {},
-    viewModel: LayoutEditorViewModel = viewModel()
+    onBackClick: () -> Unit
 ) {
+    val application = LocalContext.current.applicationContext as DexWorkspaceManagerApplication
+    val viewModelFactory = remember(application) {
+        LayoutEditorViewModelFactory(application.container.workspaceRepository)
+    }
+    val viewModel: LayoutEditorViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsState()
 
     LayoutEditorScreen(
@@ -58,7 +70,17 @@ fun LayoutEditorRoute(
         topRatio = uiState.topRatio,
         onTopRatioChange = viewModel::updateTopRatio,
         onBackClick = onBackClick,
-        onSaveClick = onSaveClick
+        workspaceName = uiState.workspaceName,
+        onWorkspaceNameChange = viewModel::updateWorkspaceName,
+        isNameDialogVisible = uiState.isNameDialogVisible,
+        isSaving = uiState.isSaving,
+        saveMessage = uiState.saveMessage,
+        saveError = uiState.saveError,
+        onSaveClick = viewModel::showSaveDialog,
+        onConfirmSave = viewModel::saveWorkspace,
+        onDismissSaveDialog = viewModel::hideSaveDialog,
+        onSaveMessageShown = viewModel::consumeSaveMessage,
+        onSaveErrorShown = viewModel::consumeSaveError
     )
 }
 
@@ -72,17 +94,84 @@ fun LayoutEditorScreen(
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
     onBackClick: () -> Unit,
-    onSaveClick: () -> Unit = {},
+    workspaceName: String,
+    onWorkspaceNameChange: (String) -> Unit,
+    isNameDialogVisible: Boolean,
+    isSaving: Boolean,
+    saveMessage: String?,
+    saveError: String?,
+    onSaveClick: () -> Unit,
+    onConfirmSave: () -> Unit,
+    onDismissSaveDialog: () -> Unit,
+    onSaveMessageShown: () -> Unit,
+    onSaveErrorShown: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
     val zones = LayoutTemplates.zonesFor(
         template = selectedTemplate,
         leftRatio = leftRatio,
         topRatio = topRatio
     )
 
+    LaunchedEffect(saveMessage) {
+        saveMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            onSaveMessageShown()
+        }
+    }
+
+    LaunchedEffect(saveError) {
+        saveError?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            onSaveErrorShown()
+        }
+    }
+
+    if (isNameDialogVisible) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isSaving) onDismissSaveDialog()
+            },
+            title = { Text(text = "Lưu workspace") },
+            text = {
+                OutlinedTextField(
+                    value = workspaceName,
+                    onValueChange = onWorkspaceNameChange,
+                    label = { Text(text = "Tên workspace") },
+                    singleLine = true,
+                    enabled = !isSaving
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onConfirmSave,
+                    enabled = !isSaving
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(20.dp).height(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(text = "Lưu")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismissSaveDialog,
+                    enabled = !isSaving
+                ) {
+                    Text(text = "Hủy")
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             EditorTopBar(
                 onBackClick = onBackClick,
@@ -313,7 +402,17 @@ private fun LayoutEditorScreenPreview() {
             topRatio = 0.5f,
             onTopRatioChange = {},
             onBackClick = {},
-            onSaveClick = {}
+            workspaceName = "Workspace của tôi",
+            onWorkspaceNameChange = {},
+            isNameDialogVisible = false,
+            isSaving = false,
+            saveMessage = null,
+            saveError = null,
+            onSaveClick = {},
+            onConfirmSave = {},
+            onDismissSaveDialog = {},
+            onSaveMessageShown = {},
+            onSaveErrorShown = {}
         )
     }
 }
