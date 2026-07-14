@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.trancong.dexworkspacemanager.feature.home.HomeScreen
+import com.trancong.dexworkspacemanager.navigation.AppNavHost
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,10 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DexWorkspaceManagerTheme {
-                HomeScreen(
-                    onCreateLayoutClick = {},
-                    onSavedLayoutsClick = {}
-                )
+                AppNavHost()
             }
         }
     }
