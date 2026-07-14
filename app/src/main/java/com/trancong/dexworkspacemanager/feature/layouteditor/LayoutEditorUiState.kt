@@ -19,5 +19,11 @@ data class LayoutEditorUiState(
     val launchMessage: String? = null,
     val launchError: String? = null,
     val dexDisplayState: DexDisplayState = DexDisplayState.NotConnected,
-    val selectedExternalDisplayId: Int? = null
+    val selectedExternalDisplayId: Int? = null,
+    val workspaceLaunchProgress: WorkspaceLaunchProgress = WorkspaceLaunchProgress(
+        totalApps = 0,
+        completedApps = 0
+    ),
+    val workspaceLaunchMessage: String? = null,
+    val workspaceLaunchError: String? = null
 )

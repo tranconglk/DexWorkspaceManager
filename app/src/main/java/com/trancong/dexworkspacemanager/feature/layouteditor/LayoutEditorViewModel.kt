@@ -254,6 +254,110 @@ class LayoutEditorViewModel(
         _uiState.update { it.copy(launchMessage = null, launchError = message) }
     }
 
+    fun startWorkspaceLaunch(totalApps: Int) {
+        _uiState.update {
+            it.copy(
+                workspaceLaunchProgress = WorkspaceLaunchProgress(
+                    totalApps = totalApps.coerceAtLeast(0),
+                    completedApps = 0,
+                    isRunning = true
+                ),
+                workspaceLaunchMessage = null,
+                workspaceLaunchError = null
+            )
+        }
+    }
+
+    fun updateWorkspaceLaunchProgress(
+        completedApps: Int,
+        totalApps: Int,
+        currentZoneId: String?,
+        currentAppLabel: String?
+    ) {
+        val safeTotal = totalApps.coerceAtLeast(0)
+        _uiState.update {
+            it.copy(
+                workspaceLaunchProgress = it.workspaceLaunchProgress.copy(
+                    totalApps = safeTotal,
+                    completedApps = completedApps.coerceIn(0, safeTotal),
+                    currentZoneId = currentZoneId,
+                    currentAppLabel = currentAppLabel
+                )
+            )
+        }
+    }
+
+    fun finishWorkspaceLaunch(result: WorkspaceLaunchResult) {
+        _uiState.update { currentState ->
+            val stoppedProgress = currentState.workspaceLaunchProgress.copy(
+                isRunning = false,
+                currentZoneId = null,
+                currentAppLabel = null
+            )
+            when (result) {
+                is WorkspaceLaunchResult.Success -> currentState.copy(
+                    workspaceLaunchProgress = stoppedProgress.copy(
+                        completedApps = stoppedProgress.totalApps
+                    ),
+                    workspaceLaunchMessage = "Đã mở ${result.launchedCount} ứng dụng",
+                    workspaceLaunchError = null
+                )
+                is WorkspaceLaunchResult.PartialSuccess -> {
+                    val failedApps = result.failures
+                        .map(WorkspaceLaunchFailure::appLabel)
+                        .distinct()
+                        .take(MAX_FAILURE_LABELS_IN_MESSAGE)
+                        .joinToString()
+                    currentState.copy(
+                        workspaceLaunchProgress = stoppedProgress.copy(
+                            completedApps = stoppedProgress.totalApps
+                        ),
+                        workspaceLaunchMessage =
+                            "Đã mở ${result.launchedCount}/${stoppedProgress.totalApps} ứng dụng",
+                        workspaceLaunchError = "Không mở được: $failedApps"
+                    )
+                }
+                WorkspaceLaunchResult.NoAssignedApps -> currentState.copy(
+                    workspaceLaunchProgress = stoppedProgress,
+                    workspaceLaunchMessage = null,
+                    workspaceLaunchError = "Workspace chưa được gán ứng dụng"
+                )
+                WorkspaceLaunchResult.NotRunningOnDex -> currentState.copy(
+                    workspaceLaunchProgress = stoppedProgress,
+                    workspaceLaunchMessage = null,
+                    workspaceLaunchError =
+                        "Hãy mở DeX Workspace Manager trực tiếp trên màn hình DeX"
+                )
+                is WorkspaceLaunchResult.Cancelled -> currentState.copy(
+                    workspaceLaunchProgress = stoppedProgress,
+                    workspaceLaunchMessage =
+                        "Đã dừng sau khi mở ${result.launchedCount} ứng dụng",
+                    workspaceLaunchError = null
+                )
+            }
+        }
+    }
+
+    fun cancelWorkspaceLaunchState() {
+        _uiState.update {
+            it.copy(
+                workspaceLaunchProgress = it.workspaceLaunchProgress.copy(
+                    isRunning = false,
+                    currentZoneId = null,
+                    currentAppLabel = null
+                )
+            )
+        }
+    }
+
+    fun consumeWorkspaceLaunchMessage() {
+        _uiState.update { it.copy(workspaceLaunchMessage = null) }
+    }
+
+    fun consumeWorkspaceLaunchError() {
+        _uiState.update { it.copy(workspaceLaunchError = null) }
+    }
+
     fun consumeLaunchMessage() {
         _uiState.update { it.copy(launchMessage = null) }
     }
@@ -413,5 +517,9 @@ class LayoutEditorViewModel(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val MAX_FAILURE_LABELS_IN_MESSAGE = 3
     }
 }

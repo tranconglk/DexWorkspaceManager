@@ -38,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -53,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +75,10 @@ import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.LaunchBounds
 import com.trancong.dexworkspacemanager.platform.applauncher.LayoutBoundsCalculator
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun LayoutEditorRoute(
@@ -84,7 +90,9 @@ fun LayoutEditorRoute(
     val currentContext = LocalContext.current
     val density = LocalDensity.current
     val application = currentContext.applicationContext as DexWorkspaceManagerApplication
+    val routeScope = rememberCoroutineScope()
     var lastDiagnosticDetails by remember { mutableStateOf<String?>(null) }
+    var workspaceLaunchJob by remember { mutableStateOf<Job?>(null) }
     val viewModelFactory = remember(application, workspaceId) {
         LayoutEditorViewModelFactory(
             workspaceRepository = application.container.workspaceRepository,
@@ -214,6 +222,128 @@ fun LayoutEditorRoute(
                     }
                 }
             },
+            workspaceLaunchProgress = uiState.workspaceLaunchProgress,
+            workspaceLaunchMessage = uiState.workspaceLaunchMessage,
+            workspaceLaunchError = uiState.workspaceLaunchError,
+            onLaunchWorkspace = {
+                if (workspaceLaunchJob?.isActive != true) {
+                    val activity = hostActivity
+                    val zones = LayoutTemplates.zonesFor(
+                        uiState.selectedTemplate,
+                        uiState.leftRatio,
+                        uiState.topRatio
+                    )
+                    val launchItems = zones.mapNotNull { zone ->
+                        uiState.appAssignments[zone.id]?.let { assignment -> zone to assignment }
+                    }
+                    when {
+                        activity == null || !activity.isRunningOnExternalDisplay() ->
+                            viewModel.finishWorkspaceLaunch(
+                                WorkspaceLaunchResult.NotRunningOnDex
+                            )
+                        launchItems.isEmpty() -> viewModel.finishWorkspaceLaunch(
+                            WorkspaceLaunchResult.NoAssignedApps
+                        )
+                        else -> {
+                            val workArea = activity.currentExternalDisplayWorkArea()
+                            viewModel.startWorkspaceLaunch(launchItems.size)
+                            if (workArea == null) {
+                                viewModel.finishWorkspaceLaunch(
+                                    WorkspaceLaunchResult.PartialSuccess(
+                                        launchedCount = 0,
+                                        failedCount = launchItems.size,
+                                        failures = launchItems.map { (zone, assignment) ->
+                                            WorkspaceLaunchFailure(
+                                                zoneId = zone.id,
+                                                appLabel = assignment.appLabel,
+                                                reason = "Không xác định được vùng làm việc DeX"
+                                            )
+                                        }
+                                    )
+                                )
+                            } else {
+                                workspaceLaunchJob = routeScope.launch {
+                                    var launchedCount = 0
+                                    val failures = mutableListOf<WorkspaceLaunchFailure>()
+                                    try {
+                                        launchItems.forEachIndexed { index, (zone, assignment) ->
+                                            viewModel.updateWorkspaceLaunchProgress(
+                                                completedApps = index,
+                                                totalApps = launchItems.size,
+                                                currentZoneId = zone.id,
+                                                currentAppLabel = assignment.appLabel
+                                            )
+                                            val result = try {
+                                                val bounds = LayoutBoundsCalculator.calculate(
+                                                    zone,
+                                                    workArea.width,
+                                                    workArea.usableHeight,
+                                                    marginPx = with(density) { 8.dp.roundToPx() }
+                                                )
+                                                lastDiagnosticDetails = diagnosticDetails(
+                                                    workArea,
+                                                    bounds,
+                                                    assignment
+                                                )
+                                                application.container.foregroundAppLauncher
+                                                    .launchInZone(
+                                                        activity,
+                                                        assignment.packageName,
+                                                        assignment.activityName,
+                                                        bounds
+                                                    )
+                                            } catch (exception: IllegalArgumentException) {
+                                                AppLaunchResult.InvalidBounds
+                                            }
+                                            if (result == AppLaunchResult.Success) {
+                                                launchedCount += 1
+                                            } else {
+                                                failures += WorkspaceLaunchFailure(
+                                                    zoneId = zone.id,
+                                                    appLabel = assignment.appLabel,
+                                                    reason = result.failureReason()
+                                                )
+                                            }
+                                            viewModel.updateWorkspaceLaunchProgress(
+                                                completedApps = index + 1,
+                                                totalApps = launchItems.size,
+                                                currentZoneId = zone.id,
+                                                currentAppLabel = assignment.appLabel
+                                            )
+                                            if (index < launchItems.lastIndex) {
+                                                delay(DEFAULT_WORKSPACE_LAUNCH_DELAY_MS)
+                                            }
+                                        }
+                                        viewModel.finishWorkspaceLaunch(
+                                            if (failures.isEmpty()) {
+                                                WorkspaceLaunchResult.Success(launchedCount)
+                                            } else {
+                                                WorkspaceLaunchResult.PartialSuccess(
+                                                    launchedCount = launchedCount,
+                                                    failedCount = failures.size,
+                                                    failures = failures
+                                                )
+                                            }
+                                        )
+                                    } catch (exception: CancellationException) {
+                                        viewModel.finishWorkspaceLaunch(
+                                            WorkspaceLaunchResult.Cancelled(launchedCount)
+                                        )
+                                        throw exception
+                                    } finally {
+                                        workspaceLaunchJob = null
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            onCancelWorkspaceLaunch = {
+                workspaceLaunchJob?.cancel()
+            },
+            onWorkspaceLaunchMessageShown = viewModel::consumeWorkspaceLaunchMessage,
+            onWorkspaceLaunchErrorShown = viewModel::consumeWorkspaceLaunchError,
             onTestTargetDisplay = { zoneId ->
                 val assignment = uiState.appAssignments[zoneId]
                 val zone = LayoutTemplates.zonesFor(
@@ -346,6 +476,13 @@ fun LayoutEditorScreen(
     onRefreshDexDisplay: () -> Unit,
     onSelectExternalDisplay: (Int) -> Unit,
     onLaunchOnDex: (String) -> Unit,
+    workspaceLaunchProgress: WorkspaceLaunchProgress,
+    workspaceLaunchMessage: String?,
+    workspaceLaunchError: String?,
+    onLaunchWorkspace: () -> Unit,
+    onCancelWorkspaceLaunch: () -> Unit,
+    onWorkspaceLaunchMessageShown: () -> Unit,
+    onWorkspaceLaunchErrorShown: () -> Unit,
     onTestTargetDisplay: (String) -> Unit,
     onBackClick: () -> Unit,
     workspaceName: String,
@@ -398,6 +535,18 @@ fun LayoutEditorScreen(
         launchError?.let { error ->
             snackbarHostState.showSnackbar(error)
             onLaunchErrorShown()
+        }
+    }
+    LaunchedEffect(workspaceLaunchMessage) {
+        workspaceLaunchMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            onWorkspaceLaunchMessageShown()
+        }
+    }
+    LaunchedEffect(workspaceLaunchError) {
+        workspaceLaunchError?.let { error ->
+            snackbarHostState.showSnackbar(error)
+            onWorkspaceLaunchErrorShown()
         }
     }
     if (isDiagnosticsVisible) {
@@ -490,6 +639,7 @@ fun LayoutEditorScreen(
         topBar = {
             EditorTopBar(
                 isEditingWorkspace = isEditingWorkspace,
+                isSaveEnabled = !workspaceLaunchProgress.isRunning,
                 onBackClick = onBackClick,
                 onSaveClick = onSaveClick
             )
@@ -529,12 +679,43 @@ fun LayoutEditorScreen(
                     onZoneClick = onZoneClick,
                     onRemoveAppFromZone = onRemoveAppFromZone,
                     onLaunchAppForZone = onLaunchAppForZone,
-                    canLaunchOnDex = canLaunchOnDex,
+                    canLaunchOnDex = canLaunchOnDex && !workspaceLaunchProgress.isRunning,
+                    isEditingEnabled = !workspaceLaunchProgress.isRunning,
                     onLaunchOnDex = onLaunchOnDex,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
                 )
+            }
+
+            Button(
+                onClick = onLaunchWorkspace,
+                enabled = appAssignments.isNotEmpty() &&
+                    canLaunchOnDex &&
+                    !workspaceLaunchProgress.isRunning,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Khởi chạy workspace")
+            }
+
+            if (workspaceLaunchProgress.isRunning) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LinearProgressIndicator(
+                        progress = { workspaceLaunchProgress.progressFraction },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        workspaceLaunchProgress.currentAppLabel?.let { "Đang mở $it" }
+                            ?: "Đang chuẩn bị khởi chạy"
+                    )
+                    Text(
+                        "${workspaceLaunchProgress.completedApps}/" +
+                            "${workspaceLaunchProgress.totalApps}"
+                    )
+                    TextButton(onClick = onCancelWorkspaceLaunch) {
+                        Text("Dừng")
+                    }
+                }
             }
 
             Row(
@@ -543,18 +724,21 @@ fun LayoutEditorScreen(
             ) {
                 Button(
                     onClick = { onTemplateSelected(LayoutTemplate.TWO_ZONES) },
+                    enabled = !workspaceLaunchProgress.isRunning,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Mẫu 2 vùng")
                 }
                 Button(
                     onClick = { onTemplateSelected(LayoutTemplate.THREE_ZONES) },
+                    enabled = !workspaceLaunchProgress.isRunning,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Mẫu 3 vùng")
                 }
                 Button(
                     onClick = onResetLayout,
+                    enabled = !workspaceLaunchProgress.isRunning,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Xóa bố cục")
@@ -665,6 +849,7 @@ private fun TargetDisplayDiagnosticPanel(
 @Composable
 private fun EditorTopBar(
     isEditingWorkspace: Boolean,
+    isSaveEnabled: Boolean,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit
 ) {
@@ -690,7 +875,7 @@ private fun EditorTopBar(
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge
             )
-            TextButton(onClick = onSaveClick) {
+            TextButton(onClick = onSaveClick, enabled = isSaveEnabled) {
                 Text(text = "Lưu")
             }
         }
@@ -710,6 +895,7 @@ private fun LayoutPreview(
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
     canLaunchOnDex: Boolean,
+    isEditingEnabled: Boolean,
     onLaunchOnDex: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -738,6 +924,7 @@ private fun LayoutPreview(
                     PreviewZone(
                         zone = zone,
                         assignment = appAssignments[zone.id],
+                        isEditingEnabled = isEditingEnabled,
                         onClick = { onZoneClick(zone.id) },
                         onRemoveClick = { onRemoveAppFromZone(zone.id) },
                         onLaunchClick = { onLaunchAppForZone(zone.id) },
@@ -773,7 +960,8 @@ private fun LayoutPreview(
                             .zIndex(1f)
                             .draggable(
                                 state = verticalDividerState,
-                                orientation = Orientation.Horizontal
+                                orientation = Orientation.Horizontal,
+                                enabled = isEditingEnabled
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -798,7 +986,8 @@ private fun LayoutPreview(
                             .zIndex(1f)
                             .draggable(
                                 state = horizontalDividerState,
-                                orientation = Orientation.Vertical
+                                orientation = Orientation.Vertical,
+                                enabled = isEditingEnabled
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -821,6 +1010,7 @@ private fun LayoutPreview(
 private fun PreviewZone(
     zone: LayoutZone,
     assignment: ZoneAppAssignment?,
+    isEditingEnabled: Boolean,
     onClick: () -> Unit,
     onRemoveClick: () -> Unit,
     onLaunchClick: () -> Unit,
@@ -830,7 +1020,7 @@ private fun PreviewZone(
 ) {
     Box(
         modifier = modifier
-            .clickable(onClick = onClick)
+            .clickable(enabled = isEditingEnabled, onClick = onClick)
             .border(
                 width = 0.5.dp,
                 color = MaterialTheme.colorScheme.outline
@@ -857,7 +1047,7 @@ private fun PreviewZone(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onLaunchClick) {
+                    TextButton(onClick = onLaunchClick, enabled = isEditingEnabled) {
                         Text("Mở thử")
                     }
                     TextButton(
@@ -866,7 +1056,7 @@ private fun PreviewZone(
                     ) {
                         Text("Mở trên DeX")
                     }
-                    IconButton(onClick = onRemoveClick) {
+                    IconButton(onClick = onRemoveClick, enabled = isEditingEnabled) {
                         Icon(
                             Icons.Default.Close,
                             contentDescription = "Xóa ứng dụng khỏi ${zone.label}"
@@ -906,6 +1096,13 @@ private fun LayoutEditorScreenPreview() {
             onRefreshDexDisplay = {},
             onSelectExternalDisplay = {},
             onLaunchOnDex = {},
+            workspaceLaunchProgress = WorkspaceLaunchProgress(0, 0),
+            workspaceLaunchMessage = null,
+            workspaceLaunchError = null,
+            onLaunchWorkspace = {},
+            onCancelWorkspaceLaunch = {},
+            onWorkspaceLaunchMessageShown = {},
+            onWorkspaceLaunchErrorShown = {},
             onTestTargetDisplay = {},
             onBackClick = {},
             workspaceName = "Workspace của tôi",
@@ -985,4 +1182,18 @@ private fun diagnosticDetails(
 ): String = "workArea=$workArea\nbounds=$bounds\n" +
     "package=${assignment.packageName}\nactivity=${assignment.activityName}"
 
+private fun AppLaunchResult.failureReason(): String = when (this) {
+    AppLaunchResult.Success -> "Không có lỗi"
+    AppLaunchResult.AppNotFound -> "Ứng dụng không còn được cài đặt"
+    AppLaunchResult.ActivityNotFound -> "Không tìm thấy màn hình khởi chạy"
+    AppLaunchResult.SecurityError -> "Không có quyền mở ứng dụng"
+    AppLaunchResult.DisplayNotAvailable -> "Màn hình DeX không còn khả dụng"
+    AppLaunchResult.LaunchNotAllowedOnDisplay -> "Hệ thống từ chối mở trên màn hình này"
+    AppLaunchResult.MultiDisplayNotSupported -> "Thiết bị không hỗ trợ màn hình phụ"
+    AppLaunchResult.BoundsNotSupported -> "ROM không hỗ trợ launch bounds"
+    AppLaunchResult.InvalidBounds -> "Kích thước vùng không hợp lệ"
+    is AppLaunchResult.UnknownError -> "Không thể mở ứng dụng"
+}
+
 private const val LAUNCH_LOG_TAG = "DexLaunch"
+private const val DEFAULT_WORKSPACE_LAUNCH_DELAY_MS = 400L
