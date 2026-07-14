@@ -5,10 +5,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
+import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 
 class LayoutEditorViewModelFactory(
     private val workspaceRepository: WorkspaceRepository,
     private val appLauncher: AppLauncher,
+    private val dexDisplayProvider: DexDisplayProvider,
     private val workspaceId: Long?
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(
@@ -20,6 +22,7 @@ class LayoutEditorViewModelFactory(
             return LayoutEditorViewModel(
                 workspaceRepository = workspaceRepository,
                 appLauncher = appLauncher,
+                dexDisplayProvider = dexDisplayProvider,
                 workspaceId = workspaceId
             ) as T
         }

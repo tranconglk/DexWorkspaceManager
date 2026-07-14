@@ -1,5 +1,8 @@
 package com.trancong.dexworkspacemanager.feature.layouteditor
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,6 +56,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.SavedStateHandle
 import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
 import com.trancong.dexworkspacemanager.navigation.AppRoute
+import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
+import com.trancong.dexworkspacemanager.platform.dex.ExternalDisplayInfo
+import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
@@ -61,11 +68,13 @@ fun LayoutEditorRoute(
     onBackClick: () -> Unit,
     onZoneClick: (String) -> Unit
 ) {
-    val application = LocalContext.current.applicationContext as DexWorkspaceManagerApplication
+    val currentContext = LocalContext.current
+    val application = currentContext.applicationContext as DexWorkspaceManagerApplication
     val viewModelFactory = remember(application, workspaceId) {
         LayoutEditorViewModelFactory(
             workspaceRepository = application.container.workspaceRepository,
             appLauncher = application.container.appLauncher,
+            dexDisplayProvider = application.container.dexDisplayProvider,
             workspaceId = workspaceId
         )
     }
@@ -117,6 +126,34 @@ fun LayoutEditorRoute(
             onZoneClick = onZoneClick,
             onRemoveAppFromZone = viewModel::removeAppFromZone,
             onLaunchAppForZone = viewModel::launchAssignedApp,
+            dexDisplayState = uiState.dexDisplayState,
+            selectedExternalDisplayId = uiState.selectedExternalDisplayId,
+            recommendedDexLaunchMode = uiState.recommendedDexLaunchMode,
+            onRefreshDexDisplay = viewModel::refreshDexDisplayState,
+            onSelectExternalDisplay = viewModel::selectExternalDisplay,
+            onLaunchAppOnDex = { zoneId ->
+                if (uiState.recommendedDexLaunchMode == DexLaunchMode.LEGACY_CURRENT_DISPLAY) {
+                    val assignment = uiState.appAssignments[zoneId]
+                    val activity = currentContext.findActivity()
+                    when {
+                        assignment == null -> viewModel.reportLaunchError(
+                            "Vùng này chưa được gán ứng dụng"
+                        )
+                        activity == null -> viewModel.reportLaunchError(
+                            "Không tìm thấy cửa sổ hiện tại để mở ứng dụng"
+                        )
+                        else -> viewModel.handleDexLaunchResult(
+                            application.container.foregroundAppLauncher.launchFromActivity(
+                                activity = activity,
+                                packageName = assignment.packageName,
+                                activityName = assignment.activityName
+                            )
+                        )
+                    }
+                } else {
+                    viewModel.launchAssignedAppOnDex(zoneId)
+                }
+            },
             onBackClick = onBackClick,
             workspaceName = uiState.workspaceName,
             onWorkspaceNameChange = viewModel::updateWorkspaceName,
@@ -186,6 +223,12 @@ fun LayoutEditorScreen(
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
+    dexDisplayState: DexDisplayState,
+    selectedExternalDisplayId: Int?,
+    recommendedDexLaunchMode: DexLaunchMode,
+    onRefreshDexDisplay: () -> Unit,
+    onSelectExternalDisplay: (Int) -> Unit,
+    onLaunchAppOnDex: (String) -> Unit,
     onBackClick: () -> Unit,
     workspaceName: String,
     onWorkspaceNameChange: (String) -> Unit,
@@ -298,6 +341,14 @@ fun LayoutEditorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            DexDisplayStatus(
+                state = dexDisplayState,
+                selectedDisplayId = selectedExternalDisplayId,
+                launchMode = recommendedDexLaunchMode,
+                onRefresh = onRefreshDexDisplay,
+                onSelectDisplay = onSelectExternalDisplay
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -315,6 +366,9 @@ fun LayoutEditorScreen(
                     onZoneClick = onZoneClick,
                     onRemoveAppFromZone = onRemoveAppFromZone,
                     onLaunchAppForZone = onLaunchAppForZone,
+                    selectedExternalDisplayId = selectedExternalDisplayId,
+                    dexLaunchMode = recommendedDexLaunchMode,
+                    onLaunchAppOnDex = onLaunchAppOnDex,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -345,6 +399,85 @@ fun LayoutEditorScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DexDisplayStatus(
+    state: DexDisplayState,
+    selectedDisplayId: Int?,
+    launchMode: DexLaunchMode,
+    onRefresh: () -> Unit,
+    onSelectDisplay: (Int) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            when (launchMode) {
+                DexLaunchMode.MODERN_DISPLAY_API -> Text(
+                    "Chế độ DeX mới",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                DexLaunchMode.LEGACY_CURRENT_DISPLAY -> {
+                    Text(
+                        "Chế độ tương thích DeX cũ",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        "Hãy mở DeX Workspace Manager trực tiếp trên màn hình DeX " +
+                            "trước khi khởi chạy ứng dụng.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                DexLaunchMode.DEFAULT_DISPLAY -> Text(
+                    "Chưa phát hiện DeX",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+            when (state) {
+                DexDisplayState.NotConnected -> if (
+                    launchMode != DexLaunchMode.DEFAULT_DISPLAY
+                ) {
+                    Text("Chưa phát hiện màn hình DeX")
+                }
+                is DexDisplayState.Connected -> DisplaySummary(state.display)
+                is DexDisplayState.MultipleDisplays -> {
+                    Text("Chọn màn hình ngoài", style = MaterialTheme.typography.titleSmall)
+                    state.displays.forEach { display ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectDisplay(display.id) },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = display.id == selectedDisplayId,
+                                onClick = { onSelectDisplay(display.id) }
+                            )
+                            DisplaySummary(display)
+                        }
+                    }
+                }
+                is DexDisplayState.Error -> Text(state.message)
+            }
+            TextButton(onClick = onRefresh) {
+                Text(if (state is DexDisplayState.Error) "Thử lại" else "Làm mới")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisplaySummary(display: ExternalDisplayInfo) {
+    Column {
+        Text(display.name, style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = "${display.width} × ${display.height} • ID ${display.id}",
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
@@ -395,6 +528,9 @@ private fun LayoutPreview(
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
+    selectedExternalDisplayId: Int?,
+    dexLaunchMode: DexLaunchMode,
+    onLaunchAppOnDex: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -425,6 +561,9 @@ private fun LayoutPreview(
                         onClick = { onZoneClick(zone.id) },
                         onRemoveClick = { onRemoveAppFromZone(zone.id) },
                         onLaunchClick = { onLaunchAppForZone(zone.id) },
+                        isDexLaunchEnabled = selectedExternalDisplayId != null,
+                        dexLaunchMode = dexLaunchMode,
+                        onLaunchOnDexClick = { onLaunchAppOnDex(zone.id) },
                         modifier = Modifier
                             .offset(
                                 x = maxWidth * zone.x,
@@ -506,6 +645,9 @@ private fun PreviewZone(
     onClick: () -> Unit,
     onRemoveClick: () -> Unit,
     onLaunchClick: () -> Unit,
+    isDexLaunchEnabled: Boolean,
+    dexLaunchMode: DexLaunchMode,
+    onLaunchOnDexClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -540,6 +682,22 @@ private fun PreviewZone(
                     TextButton(onClick = onLaunchClick) {
                         Text("Mở thử")
                     }
+                    TextButton(
+                        onClick = onLaunchOnDexClick,
+                        enabled = when (dexLaunchMode) {
+                            DexLaunchMode.MODERN_DISPLAY_API -> isDexLaunchEnabled
+                            DexLaunchMode.LEGACY_CURRENT_DISPLAY -> true
+                            DexLaunchMode.DEFAULT_DISPLAY -> false
+                        }
+                    ) {
+                        Text(
+                            if (dexLaunchMode == DexLaunchMode.LEGACY_CURRENT_DISPLAY) {
+                                "Mở từ DeX"
+                            } else {
+                                "Mở trên DeX"
+                            }
+                        )
+                    }
                     IconButton(onClick = onRemoveClick) {
                         Icon(
                             Icons.Default.Close,
@@ -569,6 +727,12 @@ private fun LayoutEditorScreenPreview() {
             onZoneClick = {},
             onRemoveAppFromZone = {},
             onLaunchAppForZone = {},
+            dexDisplayState = DexDisplayState.NotConnected,
+            selectedExternalDisplayId = null,
+            recommendedDexLaunchMode = DexLaunchMode.DEFAULT_DISPLAY,
+            onRefreshDexDisplay = {},
+            onSelectExternalDisplay = {},
+            onLaunchAppOnDex = {},
             onBackClick = {},
             workspaceName = "Workspace của tôi",
             onWorkspaceNameChange = {},
@@ -587,4 +751,10 @@ private fun LayoutEditorScreenPreview() {
             onLaunchErrorShown = {}
         )
     }
+}
+
+private fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

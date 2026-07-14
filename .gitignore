@@ -8,27 +8,20 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
-.gradle-home/
 .vscode/
 gradle/wrapper/dists/
-build/
-**/build/
+
 # Gradle cache
 .gradle/
 .gradle-home/
-gradle/wrapper/dists/
 
 # Build output
 build/
 **/build/
-
-# VS Code
-.vscode/
 
 # Kotlin cache
 .kotlin/

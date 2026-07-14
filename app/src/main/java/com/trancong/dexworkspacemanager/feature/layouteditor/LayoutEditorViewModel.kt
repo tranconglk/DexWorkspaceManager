@@ -6,6 +6,9 @@ import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
+import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
+import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
+import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,12 +19,14 @@ import kotlinx.coroutines.launch
 class LayoutEditorViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val appLauncher: AppLauncher,
+    private val dexDisplayProvider: DexDisplayProvider,
     workspaceId: Long?
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LayoutEditorUiState())
     val uiState: StateFlow<LayoutEditorUiState> = _uiState.asStateFlow()
 
     init {
+        refreshDexDisplayState()
         if (workspaceId != null) {
             loadWorkspace(workspaceId)
         }
@@ -105,12 +110,137 @@ class LayoutEditorViewModel(
                     launchMessage = null,
                     launchError = "Không có quyền mở ứng dụng này"
                 )
+                AppLaunchResult.DisplayNotAvailable -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Màn hình ngoài không còn khả dụng"
+                )
+                AppLaunchResult.LaunchNotAllowedOnDisplay -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Hệ thống không cho phép mở ứng dụng trên màn hình này"
+                )
+                AppLaunchResult.MultiDisplayNotSupported -> currentState.copy(
+                    launchMessage = null,
+                    launchError = "Thiết bị hoặc ROM không hỗ trợ mở Activity trên màn hình phụ"
+                )
                 is AppLaunchResult.UnknownError -> currentState.copy(
                     launchMessage = null,
                     launchError = "Không thể mở ứng dụng. Vui lòng thử lại"
                 )
             }
         }
+    }
+
+    fun refreshDexDisplayState() {
+        val state = dexDisplayProvider.getCurrentState()
+        val recommendedMode = dexDisplayProvider.determineRecommendedLaunchMode()
+        _uiState.update { currentState ->
+            val selectedDisplayId = when (state) {
+                is DexDisplayState.Connected -> state.display.id
+                is DexDisplayState.MultipleDisplays -> {
+                    val likelyDisplays = state.displays.filter { it.isLikelyDexDisplay }
+                    when {
+                        likelyDisplays.size == 1 -> likelyDisplays.first().id
+                        state.displays.any { it.id == currentState.selectedExternalDisplayId } ->
+                            currentState.selectedExternalDisplayId
+                        else -> null
+                    }
+                }
+                DexDisplayState.NotConnected,
+                is DexDisplayState.Error -> null
+            }
+            currentState.copy(
+                dexDisplayState = state,
+                selectedExternalDisplayId = selectedDisplayId,
+                recommendedDexLaunchMode = recommendedMode
+            )
+        }
+    }
+
+    fun selectExternalDisplay(displayId: Int) {
+        _uiState.update { currentState ->
+            val availableIds = when (val state = currentState.dexDisplayState) {
+                is DexDisplayState.Connected -> setOf(state.display.id)
+                is DexDisplayState.MultipleDisplays -> state.displays.map { it.id }.toSet()
+                DexDisplayState.NotConnected,
+                is DexDisplayState.Error -> emptySet()
+            }
+            if (displayId in availableIds) {
+                currentState.copy(selectedExternalDisplayId = displayId)
+            } else {
+                currentState
+            }
+        }
+    }
+
+    fun launchAssignedAppOnDex(zoneId: String) {
+        val currentState = _uiState.value
+        val assignment = currentState.appAssignments[zoneId]
+        if (assignment == null) {
+            _uiState.update {
+                it.copy(launchMessage = null, launchError = "Vùng này chưa được gán ứng dụng")
+            }
+            return
+        }
+        if (currentState.recommendedDexLaunchMode != DexLaunchMode.MODERN_DISPLAY_API) {
+            reportLaunchError("Chưa phát hiện màn hình DeX có thể mở bằng API display")
+            return
+        }
+        val displayId = currentState.selectedExternalDisplayId
+            ?: run {
+                reportLaunchError("Chưa phát hiện màn hình DeX")
+                return
+            }
+
+        val result = appLauncher.launchWithMode(
+            packageName = assignment.packageName,
+            activityName = assignment.activityName,
+            mode = currentState.recommendedDexLaunchMode,
+            displayId = displayId
+        )
+        handleDexLaunchResult(result)
+    }
+
+    fun handleDexLaunchResult(result: AppLaunchResult) {
+        _uiState.update { latestState ->
+            when (result) {
+                AppLaunchResult.Success -> latestState.copy(
+                    launchMessage = "Đã gửi ứng dụng lên màn hình ngoài",
+                    launchError = null
+                )
+                AppLaunchResult.DisplayNotAvailable -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Màn hình ngoài không còn khả dụng"
+                )
+                AppLaunchResult.LaunchNotAllowedOnDisplay -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Hệ thống không cho phép mở ứng dụng trên màn hình này"
+                )
+                AppLaunchResult.MultiDisplayNotSupported -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Thiết bị hoặc ROM không hỗ trợ mở Activity trên màn hình phụ"
+                )
+                AppLaunchResult.AppNotFound -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Ứng dụng không còn được cài đặt"
+                )
+                AppLaunchResult.ActivityNotFound -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Không tìm thấy màn hình khởi chạy của ứng dụng"
+                )
+                AppLaunchResult.SecurityError -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Không có quyền mở ứng dụng này"
+                )
+                is AppLaunchResult.UnknownError -> latestState.copy(
+                    launchMessage = null,
+                    launchError = "Không thể mở ứng dụng. Vui lòng thử lại"
+                )
+            }
+        }
+    }
+
+    fun reportLaunchError(message: String) {
+        _uiState.update { it.copy(launchMessage = null, launchError = message) }
     }
 
     fun consumeLaunchMessage() {

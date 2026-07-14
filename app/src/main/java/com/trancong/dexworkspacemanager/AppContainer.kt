@@ -6,7 +6,11 @@ import com.trancong.dexworkspacemanager.data.local.database.AppDatabase
 import com.trancong.dexworkspacemanager.data.repository.WorkspaceRepositoryImpl
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AndroidAppLauncher
+import com.trancong.dexworkspacemanager.platform.applauncher.AndroidForegroundAppLauncher
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
+import com.trancong.dexworkspacemanager.platform.applauncher.ForegroundAppLauncher
+import com.trancong.dexworkspacemanager.platform.dex.AndroidDexDisplayProvider
+import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.AndroidInstalledAppsProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppsProvider
 
@@ -14,6 +18,8 @@ interface AppContainer {
     val workspaceRepository: WorkspaceRepository
     val installedAppsProvider: InstalledAppsProvider
     val appLauncher: AppLauncher
+    val dexDisplayProvider: DexDisplayProvider
+    val foregroundAppLauncher: ForegroundAppLauncher
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -30,4 +36,8 @@ class DefaultAppContainer(context: Context) : AppContainer {
         AndroidInstalledAppsProvider(context)
 
     override val appLauncher: AppLauncher = AndroidAppLauncher(context)
+
+    override val dexDisplayProvider: DexDisplayProvider = AndroidDexDisplayProvider(context)
+
+    override val foregroundAppLauncher: ForegroundAppLauncher = AndroidForegroundAppLauncher()
 }
