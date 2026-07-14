@@ -51,12 +51,15 @@ fun LayoutEditorRoute(
         mutableStateOf(LayoutTemplate.THREE_ZONES)
     }
     var leftRatio by rememberSaveable { mutableStateOf(0.65f) }
+    var topRatio by rememberSaveable { mutableStateOf(0.5f) }
 
     LayoutEditorScreen(
         selectedTemplate = selectedTemplate,
         onTemplateSelected = { selectedTemplate = it },
         leftRatio = leftRatio,
         onLeftRatioChange = { leftRatio = it },
+        topRatio = topRatio,
+        onTopRatioChange = { topRatio = it },
         onBackClick = onBackClick,
         onSaveClick = onSaveClick
     )
@@ -68,13 +71,16 @@ fun LayoutEditorScreen(
     onTemplateSelected: (LayoutTemplate) -> Unit,
     leftRatio: Float,
     onLeftRatioChange: (Float) -> Unit,
+    topRatio: Float,
+    onTopRatioChange: (Float) -> Unit,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val zones = LayoutTemplates.zonesFor(
         template = selectedTemplate,
-        leftRatio = leftRatio
+        leftRatio = leftRatio,
+        topRatio = topRatio
     )
 
     Scaffold(
@@ -104,6 +110,8 @@ fun LayoutEditorScreen(
                     selectedTemplate = selectedTemplate,
                     leftRatio = leftRatio,
                     onLeftRatioChange = onLeftRatioChange,
+                    topRatio = topRatio,
+                    onTopRatioChange = onTopRatioChange,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -173,6 +181,8 @@ private fun LayoutPreview(
     selectedTemplate: LayoutTemplate,
     leftRatio: Float,
     onLeftRatioChange: (Float) -> Unit,
+    topRatio: Float,
+    onTopRatioChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -194,6 +204,7 @@ private fun LayoutPreview(
         } else {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val previewWidthPx = constraints.maxWidth.toFloat()
+                val previewHeightPx = constraints.maxHeight.toFloat()
 
                 zones.forEach { zone ->
                     PreviewZone(
@@ -209,10 +220,15 @@ private fun LayoutPreview(
                 }
 
                 if (selectedTemplate == LayoutTemplate.THREE_ZONES) {
-                    val draggableState = rememberDraggableState { deltaPx ->
+                    val verticalDividerState = rememberDraggableState { deltaPx ->
                         val ratioDelta = deltaPx / previewWidthPx
                         val newRatio = (leftRatio + ratioDelta).coerceIn(0.4f, 0.8f)
                         onLeftRatioChange(newRatio)
+                    }
+                    val horizontalDividerState = rememberDraggableState { deltaPx ->
+                        val ratioDelta = deltaPx / previewHeightPx
+                        val newRatio = (topRatio + ratioDelta).coerceIn(0.25f, 0.75f)
+                        onTopRatioChange(newRatio)
                     }
 
                     Box(
@@ -222,7 +238,7 @@ private fun LayoutPreview(
                             .fillMaxHeight()
                             .zIndex(1f)
                             .draggable(
-                                state = draggableState,
+                                state = verticalDividerState,
                                 orientation = Orientation.Horizontal
                             ),
                         contentAlignment = Alignment.Center
@@ -232,6 +248,31 @@ private fun LayoutPreview(
                                 .width(3.dp)
                                 .fillMaxHeight()
                                 .padding(vertical = 8.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .offset(
+                                x = maxWidth * leftRatio,
+                                y = maxHeight * topRatio - 12.dp
+                            )
+                            .width(maxWidth * (1f - leftRatio))
+                            .height(24.dp)
+                            .zIndex(1f)
+                            .draggable(
+                                state = horizontalDividerState,
+                                orientation = Orientation.Vertical
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .padding(horizontal = 8.dp)
                                 .clip(RoundedCornerShape(2.dp))
                                 .background(MaterialTheme.colorScheme.primary)
                         )
@@ -270,6 +311,8 @@ private fun LayoutEditorScreenPreview() {
             onTemplateSelected = {},
             leftRatio = 0.65f,
             onLeftRatioChange = {},
+            topRatio = 0.5f,
+            onTopRatioChange = {},
             onBackClick = {},
             onSaveClick = {}
         )
