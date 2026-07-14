@@ -12,10 +12,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class LayoutEditorViewModel(
-    private val workspaceRepository: WorkspaceRepository
+    private val workspaceRepository: WorkspaceRepository,
+    workspaceId: Long?
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LayoutEditorUiState())
     val uiState: StateFlow<LayoutEditorUiState> = _uiState.asStateFlow()
+
+    init {
+        if (workspaceId != null) {
+            loadWorkspace(workspaceId)
+        }
+    }
 
     fun selectTemplate(template: LayoutTemplate) {
         _uiState.update { currentState ->
@@ -73,14 +80,20 @@ class LayoutEditorViewModel(
             return
         }
 
+        val isNewWorkspace = currentState.workspaceId == null
         val timestamp = System.currentTimeMillis()
+        val createdAt = if (isNewWorkspace) {
+            timestamp
+        } else {
+            currentState.originalCreatedAt ?: timestamp
+        }
         val workspace = Workspace(
-            id = 0,
+            id = currentState.workspaceId ?: 0,
             name = workspaceName,
             template = currentState.selectedTemplate,
             leftRatio = currentState.leftRatio,
             topRatio = currentState.topRatio,
-            createdAt = timestamp,
+            createdAt = createdAt,
             updatedAt = timestamp
         )
 
@@ -95,12 +108,26 @@ class LayoutEditorViewModel(
 
         viewModelScope.launch {
             try {
-                workspaceRepository.save(workspace)
-                _uiState.update {
-                    it.copy(
+                val savedWorkspaceId = workspaceRepository.save(workspace)
+                _uiState.update { latestState ->
+                    latestState.copy(
+                        workspaceId = if (isNewWorkspace) {
+                            savedWorkspaceId
+                        } else {
+                            latestState.workspaceId
+                        },
+                        originalCreatedAt = if (isNewWorkspace) {
+                            createdAt
+                        } else {
+                            latestState.originalCreatedAt
+                        },
                         isSaving = false,
                         isNameDialogVisible = false,
-                        saveMessage = "Đã lưu workspace"
+                        saveMessage = if (isNewWorkspace) {
+                            "Đã lưu workspace"
+                        } else {
+                            "Đã cập nhật workspace"
+                        }
                     )
                 }
             } catch (exception: CancellationException) {
@@ -125,6 +152,48 @@ class LayoutEditorViewModel(
     fun consumeSaveError() {
         _uiState.update { currentState ->
             currentState.copy(saveError = null)
+        }
+    }
+
+    private fun loadWorkspace(id: Long) {
+        _uiState.update { currentState ->
+            currentState.copy(isLoadingWorkspace = true, loadError = null)
+        }
+
+        viewModelScope.launch {
+            try {
+                val workspace = workspaceRepository.getById(id)
+                if (workspace == null) {
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            isLoadingWorkspace = false,
+                            loadError = "Không tìm thấy workspace"
+                        )
+                    }
+                } else {
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            workspaceId = workspace.id,
+                            originalCreatedAt = workspace.createdAt,
+                            workspaceName = workspace.name,
+                            selectedTemplate = workspace.template,
+                            leftRatio = workspace.leftRatio,
+                            topRatio = workspace.topRatio,
+                            isLoadingWorkspace = false,
+                            loadError = null
+                        )
+                    }
+                }
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        isLoadingWorkspace = false,
+                        loadError = "Không thể tải workspace. Vui lòng thử lại"
+                    )
+                }
+            }
         }
     }
 }

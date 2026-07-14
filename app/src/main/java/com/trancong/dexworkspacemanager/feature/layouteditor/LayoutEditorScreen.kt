@@ -52,40 +52,88 @@ import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
 fun LayoutEditorRoute(
+    workspaceId: Long?,
     onBackClick: () -> Unit
 ) {
     val application = LocalContext.current.applicationContext as DexWorkspaceManagerApplication
-    val viewModelFactory = remember(application) {
-        LayoutEditorViewModelFactory(application.container.workspaceRepository)
+    val viewModelFactory = remember(application, workspaceId) {
+        LayoutEditorViewModelFactory(
+            workspaceRepository = application.container.workspaceRepository,
+            workspaceId = workspaceId
+        )
     }
     val viewModel: LayoutEditorViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsState()
 
-    LayoutEditorScreen(
-        selectedTemplate = uiState.selectedTemplate,
-        onTemplateSelected = viewModel::selectTemplate,
-        onResetLayout = viewModel::resetLayout,
-        leftRatio = uiState.leftRatio,
-        onLeftRatioChange = viewModel::updateLeftRatio,
-        topRatio = uiState.topRatio,
-        onTopRatioChange = viewModel::updateTopRatio,
-        onBackClick = onBackClick,
-        workspaceName = uiState.workspaceName,
-        onWorkspaceNameChange = viewModel::updateWorkspaceName,
-        isNameDialogVisible = uiState.isNameDialogVisible,
-        isSaving = uiState.isSaving,
-        saveMessage = uiState.saveMessage,
-        saveError = uiState.saveError,
-        onSaveClick = viewModel::showSaveDialog,
-        onConfirmSave = viewModel::saveWorkspace,
-        onDismissSaveDialog = viewModel::hideSaveDialog,
-        onSaveMessageShown = viewModel::consumeSaveMessage,
-        onSaveErrorShown = viewModel::consumeSaveError
-    )
+    when {
+        uiState.isLoadingWorkspace -> LayoutEditorLoadingState()
+        uiState.loadError != null -> LayoutEditorLoadError(
+            message = uiState.loadError.orEmpty(),
+            onBackClick = onBackClick
+        )
+        else -> LayoutEditorScreen(
+            isEditingWorkspace = uiState.workspaceId != null,
+            selectedTemplate = uiState.selectedTemplate,
+            onTemplateSelected = viewModel::selectTemplate,
+            onResetLayout = viewModel::resetLayout,
+            leftRatio = uiState.leftRatio,
+            onLeftRatioChange = viewModel::updateLeftRatio,
+            topRatio = uiState.topRatio,
+            onTopRatioChange = viewModel::updateTopRatio,
+            onBackClick = onBackClick,
+            workspaceName = uiState.workspaceName,
+            onWorkspaceNameChange = viewModel::updateWorkspaceName,
+            isNameDialogVisible = uiState.isNameDialogVisible,
+            isSaving = uiState.isSaving,
+            saveMessage = uiState.saveMessage,
+            saveError = uiState.saveError,
+            onSaveClick = viewModel::showSaveDialog,
+            onConfirmSave = viewModel::saveWorkspace,
+            onDismissSaveDialog = viewModel::hideSaveDialog,
+            onSaveMessageShown = viewModel::consumeSaveMessage,
+            onSaveErrorShown = viewModel::consumeSaveError
+        )
+    }
+}
+
+@Composable
+private fun LayoutEditorLoadingState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun LayoutEditorLoadError(
+    message: String,
+    onBackClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Button(
+            onClick = onBackClick,
+            modifier = Modifier.padding(top = 16.dp)
+        ) {
+            Text(text = "Quay lại")
+        }
+    }
 }
 
 @Composable
 fun LayoutEditorScreen(
+    isEditingWorkspace: Boolean,
     selectedTemplate: LayoutTemplate,
     onTemplateSelected: (LayoutTemplate) -> Unit,
     onResetLayout: () -> Unit,
@@ -174,6 +222,7 @@ fun LayoutEditorScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             EditorTopBar(
+                isEditingWorkspace = isEditingWorkspace,
                 onBackClick = onBackClick,
                 onSaveClick = onSaveClick
             )
@@ -234,6 +283,7 @@ fun LayoutEditorScreen(
 
 @Composable
 private fun EditorTopBar(
+    isEditingWorkspace: Boolean,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit
 ) {
@@ -251,7 +301,11 @@ private fun EditorTopBar(
                 )
             }
             Text(
-                text = "Trình chỉnh sửa bố cục",
+                text = if (isEditingWorkspace) {
+                    "Chỉnh sửa workspace"
+                } else {
+                    "Trình chỉnh sửa bố cục"
+                },
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge
             )
@@ -394,6 +448,7 @@ private fun PreviewZone(
 private fun LayoutEditorScreenPreview() {
     DexWorkspaceManagerTheme {
         LayoutEditorScreen(
+            isEditingWorkspace = false,
             selectedTemplate = LayoutTemplate.THREE_ZONES,
             onTemplateSelected = {},
             onResetLayout = {},

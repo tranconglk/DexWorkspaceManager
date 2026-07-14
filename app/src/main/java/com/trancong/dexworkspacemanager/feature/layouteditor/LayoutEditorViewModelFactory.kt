@@ -6,7 +6,8 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 
 class LayoutEditorViewModelFactory(
-    private val workspaceRepository: WorkspaceRepository
+    private val workspaceRepository: WorkspaceRepository,
+    private val workspaceId: Long?
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(
         modelClass: Class<T>,
@@ -14,7 +15,10 @@ class LayoutEditorViewModelFactory(
     ): T {
         if (modelClass.isAssignableFrom(LayoutEditorViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return LayoutEditorViewModel(workspaceRepository) as T
+            return LayoutEditorViewModel(
+                workspaceRepository = workspaceRepository,
+                workspaceId = workspaceId
+            ) as T
         }
 
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
