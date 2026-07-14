@@ -48,6 +48,26 @@ class LayoutEditorViewModel(
         }
     }
 
+    fun assignAppToZone(
+        zoneId: String,
+        packageName: String,
+        activityName: String,
+        appLabel: String
+    ) {
+        val assignment = ZoneAppAssignment(zoneId, packageName, activityName, appLabel)
+        _uiState.update { currentState ->
+            currentState.copy(
+                appAssignments = currentState.appAssignments + (zoneId to assignment)
+            )
+        }
+    }
+
+    fun removeAppFromZone(zoneId: String) {
+        _uiState.update { currentState ->
+            currentState.copy(appAssignments = currentState.appAssignments - zoneId)
+        }
+    }
+
     fun showSaveDialog() {
         _uiState.update { currentState ->
             currentState.copy(isNameDialogVisible = true)

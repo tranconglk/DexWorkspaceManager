@@ -12,5 +12,6 @@ data class LayoutEditorUiState(
     val isNameDialogVisible: Boolean = false,
     val isSaving: Boolean = false,
     val saveMessage: String? = null,
-    val saveError: String? = null
+    val saveError: String? = null,
+    val appAssignments: Map<String, ZoneAppAssignment> = emptyMap()
 )

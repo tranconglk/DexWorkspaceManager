@@ -2,6 +2,7 @@ package com.trancong.dexworkspacemanager.feature.layouteditor
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,13 +49,17 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.SavedStateHandle
 import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
+import com.trancong.dexworkspacemanager.navigation.AppRoute
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
 fun LayoutEditorRoute(
     workspaceId: Long?,
-    onBackClick: () -> Unit
+    savedStateHandle: SavedStateHandle,
+    onBackClick: () -> Unit,
+    onZoneClick: (String) -> Unit
 ) {
     val application = LocalContext.current.applicationContext as DexWorkspaceManagerApplication
     val viewModelFactory = remember(application, workspaceId) {
@@ -64,6 +70,32 @@ fun LayoutEditorRoute(
     }
     val viewModel: LayoutEditorViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsState()
+    val resultZoneId by savedStateHandle
+        .getStateFlow<String?>(AppRoute.RESULT_ZONE_ID, null)
+        .collectAsState()
+    val resultPackageName by savedStateHandle
+        .getStateFlow<String?>(AppRoute.RESULT_PACKAGE_NAME, null)
+        .collectAsState()
+    val resultActivityName by savedStateHandle
+        .getStateFlow<String?>(AppRoute.RESULT_ACTIVITY_NAME, null)
+        .collectAsState()
+    val resultAppLabel by savedStateHandle
+        .getStateFlow<String?>(AppRoute.RESULT_APP_LABEL, null)
+        .collectAsState()
+
+    LaunchedEffect(resultZoneId, resultPackageName, resultActivityName, resultAppLabel) {
+        val zoneId = resultZoneId
+        val packageName = resultPackageName
+        val activityName = resultActivityName
+        val appLabel = resultAppLabel
+        if (zoneId != null && packageName != null && activityName != null && appLabel != null) {
+            viewModel.assignAppToZone(zoneId, packageName, activityName, appLabel)
+            savedStateHandle.remove<String>(AppRoute.RESULT_ZONE_ID)
+            savedStateHandle.remove<String>(AppRoute.RESULT_PACKAGE_NAME)
+            savedStateHandle.remove<String>(AppRoute.RESULT_ACTIVITY_NAME)
+            savedStateHandle.remove<String>(AppRoute.RESULT_APP_LABEL)
+        }
+    }
 
     when {
         uiState.isLoadingWorkspace -> LayoutEditorLoadingState()
@@ -80,6 +112,9 @@ fun LayoutEditorRoute(
             onLeftRatioChange = viewModel::updateLeftRatio,
             topRatio = uiState.topRatio,
             onTopRatioChange = viewModel::updateTopRatio,
+            appAssignments = uiState.appAssignments,
+            onZoneClick = onZoneClick,
+            onRemoveAppFromZone = viewModel::removeAppFromZone,
             onBackClick = onBackClick,
             workspaceName = uiState.workspaceName,
             onWorkspaceNameChange = viewModel::updateWorkspaceName,
@@ -141,6 +176,9 @@ fun LayoutEditorScreen(
     onLeftRatioChange: (Float) -> Unit,
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
+    appAssignments: Map<String, ZoneAppAssignment>,
+    onZoneClick: (String) -> Unit,
+    onRemoveAppFromZone: (String) -> Unit,
     onBackClick: () -> Unit,
     workspaceName: String,
     onWorkspaceNameChange: (String) -> Unit,
@@ -248,6 +286,9 @@ fun LayoutEditorScreen(
                     onLeftRatioChange = onLeftRatioChange,
                     topRatio = topRatio,
                     onTopRatioChange = onTopRatioChange,
+                    appAssignments = appAssignments,
+                    onZoneClick = onZoneClick,
+                    onRemoveAppFromZone = onRemoveAppFromZone,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -324,6 +365,9 @@ private fun LayoutPreview(
     onLeftRatioChange: (Float) -> Unit,
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
+    appAssignments: Map<String, ZoneAppAssignment>,
+    onZoneClick: (String) -> Unit,
+    onRemoveAppFromZone: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -350,6 +394,9 @@ private fun LayoutPreview(
                 zones.forEach { zone ->
                     PreviewZone(
                         zone = zone,
+                        assignment = appAssignments[zone.id],
+                        onClick = { onZoneClick(zone.id) },
+                        onRemoveClick = { onRemoveAppFromZone(zone.id) },
                         modifier = Modifier
                             .offset(
                                 x = maxWidth * zone.x,
@@ -427,19 +474,44 @@ private fun LayoutPreview(
 @Composable
 private fun PreviewZone(
     zone: LayoutZone,
+    assignment: ZoneAppAssignment?,
+    onClick: () -> Unit,
+    onRemoveClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.border(
-            width = 0.5.dp,
-            color = MaterialTheme.colorScheme.outline
-        ),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outline
+            )
+            .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = zone.label,
-            style = MaterialTheme.typography.titleMedium
-        )
+        if (assignment == null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = zone.label, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Chạm để chọn ứng dụng",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = assignment.appLabel, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = assignment.packageName,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                IconButton(onClick = onRemoveClick) {
+                    Icon(Icons.Default.Close, contentDescription = "Xóa ứng dụng khỏi ${zone.label}")
+                }
+            }
+        }
     }
 }
 
@@ -456,6 +528,9 @@ private fun LayoutEditorScreenPreview() {
             onLeftRatioChange = {},
             topRatio = 0.5f,
             onTopRatioChange = {},
+            appAssignments = emptyMap(),
+            onZoneClick = {},
+            onRemoveAppFromZone = {},
             onBackClick = {},
             workspaceName = "Workspace của tôi",
             onWorkspaceNameChange = {},
