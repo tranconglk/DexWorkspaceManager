@@ -23,27 +23,40 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
-private enum class LayoutTemplate {
-    TwoZones,
-    ThreeZones,
-    Empty
+@Composable
+fun LayoutEditorRoute(
+    onBackClick: () -> Unit,
+    onSaveClick: () -> Unit = {}
+) {
+    var selectedTemplate by rememberSaveable {
+        mutableStateOf(LayoutTemplate.THREE_ZONES)
+    }
+
+    LayoutEditorScreen(
+        selectedTemplate = selectedTemplate,
+        onTemplateSelected = { selectedTemplate = it },
+        onBackClick = onBackClick,
+        onSaveClick = onSaveClick
+    )
 }
 
 @Composable
 fun LayoutEditorScreen(
+    selectedTemplate: LayoutTemplate,
+    onTemplateSelected: (LayoutTemplate) -> Unit,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedTemplate by remember { mutableStateOf(LayoutTemplate.ThreeZones) }
-
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -79,19 +92,19 @@ fun LayoutEditorScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { selectedTemplate = LayoutTemplate.TwoZones },
+                    onClick = { onTemplateSelected(LayoutTemplate.TWO_ZONES) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Mẫu 2 vùng")
                 }
                 Button(
-                    onClick = { selectedTemplate = LayoutTemplate.ThreeZones },
+                    onClick = { onTemplateSelected(LayoutTemplate.THREE_ZONES) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Mẫu 3 vùng")
                 }
                 Button(
-                    onClick = { selectedTemplate = LayoutTemplate.Empty },
+                    onClick = { onTemplateSelected(LayoutTemplate.EMPTY) },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Xóa bố cục")
@@ -146,7 +159,7 @@ private fun LayoutPreview(
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         when (template) {
-            LayoutTemplate.TwoZones -> Row(Modifier.fillMaxSize()) {
+            LayoutTemplate.TWO_ZONES -> Row(Modifier.fillMaxSize()) {
                 PreviewZone(
                     label = "Vùng 1",
                     modifier = Modifier.weight(1f)
@@ -159,7 +172,7 @@ private fun LayoutPreview(
                 )
             }
 
-            LayoutTemplate.ThreeZones -> Row(Modifier.fillMaxSize()) {
+            LayoutTemplate.THREE_ZONES -> Row(Modifier.fillMaxSize()) {
                 PreviewZone(
                     label = "Vùng 1",
                     modifier = Modifier.weight(0.65f)
@@ -182,7 +195,7 @@ private fun LayoutPreview(
                 }
             }
 
-            LayoutTemplate.Empty -> Box(
+            LayoutTemplate.EMPTY -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
@@ -204,6 +217,19 @@ private fun PreviewZone(
         Text(
             text = label,
             style = MaterialTheme.typography.titleMedium
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun LayoutEditorScreenPreview() {
+    DexWorkspaceManagerTheme {
+        LayoutEditorScreen(
+            selectedTemplate = LayoutTemplate.THREE_ZONES,
+            onTemplateSelected = {},
+            onBackClick = {},
+            onSaveClick = {}
         )
     }
 }
