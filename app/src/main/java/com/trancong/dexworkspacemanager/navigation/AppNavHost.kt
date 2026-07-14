@@ -6,8 +6,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.trancong.dexworkspacemanager.feature.home.HomeScreen
 import com.trancong.dexworkspacemanager.feature.apppicker.AppPickerRoute
+import com.trancong.dexworkspacemanager.feature.home.HomeRoute
 import com.trancong.dexworkspacemanager.feature.layouteditor.LayoutEditorRoute
 import com.trancong.dexworkspacemanager.feature.savedlayouts.SavedLayoutsRoute
 
@@ -20,12 +20,11 @@ fun AppNavHost() {
         startDestination = AppRoute.Home.route
     ) {
         composable(AppRoute.Home.route) {
-            HomeScreen(
-                onCreateLayoutClick = {
-                    navController.navigate(AppRoute.layoutEditor())
-                },
-                onSavedLayoutsClick = {
-                    navController.navigate(AppRoute.SavedLayouts.route)
+            HomeRoute(
+                onCreateLayoutClick = { navController.navigate(AppRoute.layoutEditor()) },
+                onSavedLayoutsClick = { navController.navigate(AppRoute.SavedLayouts.route) },
+                onEditWorkspace = { workspaceId ->
+                    navController.navigate(AppRoute.layoutEditor(workspaceId))
                 }
             )
         }
@@ -46,9 +45,7 @@ fun AppNavHost() {
                 workspaceId = workspaceId,
                 savedStateHandle = backStackEntry.savedStateHandle,
                 onBackClick = navController::popBackStack,
-                onZoneClick = { zoneId ->
-                    navController.navigate(AppRoute.appPicker(zoneId))
-                }
+                onZoneClick = { zoneId -> navController.navigate(AppRoute.appPicker(zoneId)) }
             )
         }
         composable(
