@@ -11,6 +11,7 @@ import com.trancong.dexworkspacemanager.platform.applauncher.AndroidAppLauncher
 import com.trancong.dexworkspacemanager.platform.applauncher.AndroidForegroundAppLauncher
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import com.trancong.dexworkspacemanager.platform.applauncher.ForegroundAppLauncher
+import com.trancong.dexworkspacemanager.platform.applauncher.WorkspaceLaunchCoordinator
 import com.trancong.dexworkspacemanager.platform.dex.AndroidDexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.AndroidInstalledAppsProvider
@@ -22,6 +23,7 @@ interface AppContainer {
     val appLauncher: AppLauncher
     val dexDisplayProvider: DexDisplayProvider
     val foregroundAppLauncher: ForegroundAppLauncher
+    val workspaceLaunchCoordinator: WorkspaceLaunchCoordinator
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -42,4 +44,6 @@ class DefaultAppContainer(context: Context) : AppContainer {
     override val dexDisplayProvider: DexDisplayProvider = AndroidDexDisplayProvider(context)
 
     override val foregroundAppLauncher: ForegroundAppLauncher = AndroidForegroundAppLauncher()
+
+    override val workspaceLaunchCoordinator = WorkspaceLaunchCoordinator(foregroundAppLauncher)
 }

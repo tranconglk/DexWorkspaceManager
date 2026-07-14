@@ -1,5 +1,8 @@
 package com.trancong.dexworkspacemanager.feature.savedlayouts
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,10 +32,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +49,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
 import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.feature.layouteditor.LayoutTemplate
+import com.trancong.dexworkspacemanager.platform.applauncher.currentExternalDisplayWorkArea
+import com.trancong.dexworkspacemanager.platform.applauncher.isRunningOnExternalDisplay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
@@ -55,6 +68,13 @@ fun SavedLayoutsRoute(
     val viewModel: SavedLayoutsViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val routeScope = rememberCoroutineScope()
+    val hostActivity = LocalContext.current.findActivity()
+    var launchJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { launchJob?.cancel() }
+    }
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let { message ->
@@ -70,6 +90,20 @@ fun SavedLayoutsRoute(
         }
     }
 
+    LaunchedEffect(uiState.launchMessage) {
+        uiState.launchMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeLaunchMessage()
+        }
+    }
+
+    LaunchedEffect(uiState.launchError) {
+        uiState.launchError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.consumeLaunchError()
+        }
+    }
+
     SavedLayoutsScreen(
         uiState = uiState,
         onBackClick = onBackClick,
@@ -77,6 +111,40 @@ fun SavedLayoutsRoute(
         onDeleteClick = viewModel::requestDelete,
         onConfirmDelete = viewModel::confirmDelete,
         onCancelDelete = viewModel::cancelDelete,
+        onLaunchWorkspace = { workspace ->
+            if (launchJob?.isActive != true) {
+                val activity = hostActivity
+                val workArea = activity?.currentExternalDisplayWorkArea()
+                when {
+                    activity == null || !activity.isRunningOnExternalDisplay() || workArea == null ->
+                        viewModel.finishWorkspaceLaunch(
+                            workspace.id,
+                            com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult.NotRunningOnDex
+                        )
+                    else -> {
+                        viewModel.startWorkspaceLaunch(workspace.id, workspace.appAssignments.size)
+                        launchJob = routeScope.launch {
+                            val result = application.container.workspaceLaunchCoordinator.launch(
+                                activity = activity,
+                                workspace = workspace,
+                                workArea = workArea
+                            ) { completed, total, assignment ->
+                                viewModel.updateWorkspaceLaunchProgress(
+                                    workspaceId = workspace.id,
+                                    completedApps = completed,
+                                    totalApps = total,
+                                    currentZoneId = assignment?.zoneId,
+                                    currentAppLabel = assignment?.appLabel
+                                )
+                            }
+                            viewModel.finishWorkspaceLaunch(workspace.id, result)
+                            launchJob = null
+                        }
+                    }
+                }
+            }
+        },
+        onCancelWorkspaceLaunch = { launchJob?.cancel() },
         snackbarHostState = snackbarHostState
     )
 }
@@ -90,6 +158,8 @@ fun SavedLayoutsScreen(
     onDeleteClick: (Workspace) -> Unit,
     onConfirmDelete: () -> Unit,
     onCancelDelete: () -> Unit,
+    onLaunchWorkspace: (Workspace) -> Unit,
+    onCancelWorkspaceLaunch: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
@@ -154,8 +224,12 @@ fun SavedLayoutsScreen(
                 ) { workspace ->
                     WorkspaceCard(
                         workspace = workspace,
+                        launchingWorkspaceId = uiState.launchingWorkspaceId,
+                        launchProgress = uiState.launchProgress,
                         onClick = { onWorkspaceClick(workspace) },
-                        onDeleteClick = { onDeleteClick(workspace) }
+                        onDeleteClick = { onDeleteClick(workspace) },
+                        onLaunchClick = { onLaunchWorkspace(workspace) },
+                        onCancelLaunch = onCancelWorkspaceLaunch
                     )
                 }
             }
@@ -193,13 +267,19 @@ private fun EmptyContent(modifier: Modifier = Modifier) {
 @Composable
 private fun WorkspaceCard(
     workspace: Workspace,
+    launchingWorkspaceId: Long?,
+    launchProgress: com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onLaunchClick: () -> Unit,
+    onCancelLaunch: () -> Unit
 ) {
+    val isLaunching = launchingWorkspaceId == workspace.id
+    val anotherWorkspaceIsLaunching = launchingWorkspaceId != null && !isLaunching
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = !isLaunching, onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -225,8 +305,38 @@ private fun WorkspaceCard(
                     text = "Cập nhật: ${formatTimestamp(workspace.updatedAt)}",
                     style = MaterialTheme.typography.bodySmall
                 )
+                if (isLaunching) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.width(20.dp))
+                        Text(
+                            text = launchProgress.currentAppLabel?.let { "Đang mở $it" }
+                                ?: "Đang chuẩn bị",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text("${launchProgress.completedApps}/${launchProgress.totalApps}")
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = onLaunchClick,
+                        enabled = !isLaunching && !anotherWorkspaceIsLaunching &&
+                            workspace.appAssignments.isNotEmpty()
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Khởi chạy ${workspace.name}"
+                        )
+                        Text("Khởi chạy")
+                    }
+                    if (isLaunching) {
+                        TextButton(onClick = onCancelLaunch) { Text("Dừng") }
+                    }
+                }
             }
-            IconButton(onClick = onDeleteClick) {
+            IconButton(onClick = onDeleteClick, enabled = !isLaunching) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Xóa ${workspace.name}"
@@ -234,6 +344,12 @@ private fun WorkspaceCard(
             }
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private fun LayoutTemplate.displayName(): String = when (this) {

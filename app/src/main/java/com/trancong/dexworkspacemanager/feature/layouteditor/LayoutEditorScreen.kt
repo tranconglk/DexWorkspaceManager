@@ -3,9 +3,7 @@ package com.trancong.dexworkspacemanager.feature.layouteditor
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.Display
 import android.os.Build
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -70,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.SavedStateHandle
 import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
+import com.trancong.dexworkspacemanager.domain.model.Workspace
+import com.trancong.dexworkspacemanager.domain.model.WorkspaceAppAssignment
 import com.trancong.dexworkspacemanager.navigation.AppRoute
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
 import com.trancong.dexworkspacemanager.platform.dex.ExternalDisplayInfo
@@ -77,10 +77,10 @@ import com.trancong.dexworkspacemanager.platform.dex.DexWorkArea
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.LaunchBounds
 import com.trancong.dexworkspacemanager.platform.applauncher.LayoutBoundsCalculator
+import com.trancong.dexworkspacemanager.platform.applauncher.currentExternalDisplayWorkArea
+import com.trancong.dexworkspacemanager.platform.applauncher.isRunningOnExternalDisplay
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -236,117 +236,36 @@ fun LayoutEditorRoute(
             onLaunchWorkspace = {
                 if (workspaceLaunchJob?.isActive != true) {
                     val activity = hostActivity
-                    val zones = LayoutTemplates.zonesFor(
-                        uiState.selectedTemplate,
-                        uiState.leftRatio,
-                        uiState.topRatio
-                    )
-                    val zonesById = zones.associateBy(LayoutZone::id)
-                    val launchItems = uiState.appAssignments.values
-                        .filter { it.zoneId in zonesById }
-                        .sortedWith(
-                            compareBy<ZoneAppAssignment> { it.launchOrder }
-                                .thenBy { it.zoneId }
-                        )
-                        .map { assignment -> zonesById.getValue(assignment.zoneId) to assignment }
-                    val launchDelayMs = uiState.launchDelayMs
+                    val workspace = uiState.toWorkspaceSnapshot()
                     when {
                         activity == null || !activity.isRunningOnExternalDisplay() ->
                             viewModel.finishWorkspaceLaunch(
                                 WorkspaceLaunchResult.NotRunningOnDex
                             )
-                        launchItems.isEmpty() -> viewModel.finishWorkspaceLaunch(
+                        workspace.appAssignments.isEmpty() -> viewModel.finishWorkspaceLaunch(
                             WorkspaceLaunchResult.NoAssignedApps
                         )
                         else -> {
                             val workArea = activity.currentExternalDisplayWorkArea()
-                            viewModel.startWorkspaceLaunch(launchItems.size)
+                            viewModel.startWorkspaceLaunch(workspace.appAssignments.size)
                             if (workArea == null) {
                                 viewModel.finishWorkspaceLaunch(
-                                    WorkspaceLaunchResult.PartialSuccess(
-                                        launchedCount = 0,
-                                        failedCount = launchItems.size,
-                                        failures = launchItems.map { (zone, assignment) ->
-                                            WorkspaceLaunchFailure(
-                                                zoneId = zone.id,
-                                                appLabel = assignment.appLabel,
-                                                reason = "Không xác định được vùng làm việc DeX"
-                                            )
-                                        }
-                                    )
+                                    WorkspaceLaunchResult.NotRunningOnDex
                                 )
                             } else {
                                 workspaceLaunchJob = routeScope.launch {
-                                    var launchedCount = 0
-                                    val failures = mutableListOf<WorkspaceLaunchFailure>()
-                                    try {
-                                        launchItems.forEachIndexed { index, (zone, assignment) ->
+                                    val result = application.container.workspaceLaunchCoordinator
+                                        .launch(activity, workspace, workArea) {
+                                            completed, total, assignment ->
                                             viewModel.updateWorkspaceLaunchProgress(
-                                                completedApps = index,
-                                                totalApps = launchItems.size,
-                                                currentZoneId = zone.id,
-                                                currentAppLabel = assignment.appLabel
+                                                completedApps = completed,
+                                                totalApps = total,
+                                                currentZoneId = assignment?.zoneId,
+                                                currentAppLabel = assignment?.appLabel
                                             )
-                                            val result = try {
-                                                val bounds = LayoutBoundsCalculator.calculate(
-                                                    zone,
-                                                    workArea.width,
-                                                    workArea.usableHeight,
-                                                    marginPx = with(density) { 8.dp.roundToPx() }
-                                                )
-                                                lastDiagnosticDetails = diagnosticDetails(
-                                                    workArea,
-                                                    bounds,
-                                                    assignment
-                                                )
-                                                application.container.foregroundAppLauncher
-                                                    .launchInZone(
-                                                        activity,
-                                                        assignment.packageName,
-                                                        assignment.activityName,
-                                                        bounds
-                                                    )
-                                            } catch (exception: IllegalArgumentException) {
-                                                AppLaunchResult.InvalidBounds
-                                            }
-                                            if (result == AppLaunchResult.Success) {
-                                                launchedCount += 1
-                                            } else {
-                                                failures += WorkspaceLaunchFailure(
-                                                    zoneId = zone.id,
-                                                    appLabel = assignment.appLabel,
-                                                    reason = result.failureReason()
-                                                )
-                                            }
-                                            viewModel.updateWorkspaceLaunchProgress(
-                                                completedApps = index + 1,
-                                                totalApps = launchItems.size,
-                                                currentZoneId = zone.id,
-                                                currentAppLabel = assignment.appLabel
-                                            )
-                                            if (index < launchItems.lastIndex) {
-                                                delay(launchDelayMs)
-                                            }
                                         }
-                                        viewModel.finishWorkspaceLaunch(
-                                            if (failures.isEmpty()) {
-                                                WorkspaceLaunchResult.Success(launchedCount)
-                                            } else {
-                                                WorkspaceLaunchResult.PartialSuccess(
-                                                    launchedCount = launchedCount,
-                                                    failedCount = failures.size,
-                                                    failures = failures
-                                                )
-                                            }
-                                        )
-                                    } catch (exception: CancellationException) {
-                                        viewModel.finishWorkspaceLaunch(
-                                            WorkspaceLaunchResult.Cancelled(launchedCount)
-                                        )
-                                        throw exception
-                                    } finally {
-                                        workspaceLaunchJob = null
-                                    }
+                                    viewModel.finishWorkspaceLaunch(result)
+                                    workspaceLaunchJob = null
                                 }
                             }
                         }
@@ -1243,35 +1162,31 @@ private fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-@Suppress("DEPRECATION")
-private fun Activity.currentExternalDisplayWorkArea(): DexWorkArea? {
-    val display = windowManager.defaultDisplay
-    if (display.displayId == Display.DEFAULT_DISPLAY) return null
-    val metrics = DisplayMetrics()
-    display.getRealMetrics(metrics)
-    if (metrics.widthPixels <= 0 || metrics.heightPixels <= 0) return null
-    return DexWorkArea(
-        width = metrics.widthPixels,
-        height = metrics.heightPixels,
-        bottomInset = 0
-    )
-}
+private fun LayoutEditorUiState.toWorkspaceSnapshot(): Workspace = Workspace(
+    id = workspaceId ?: 0L,
+    name = workspaceName.ifBlank { "Workspace hiện tại" },
+    template = selectedTemplate,
+    leftRatio = leftRatio,
+    topRatio = topRatio,
+    createdAt = originalCreatedAt ?: 0L,
+    updatedAt = 0L,
+    appAssignments = appAssignments.values.map { assignment ->
+        WorkspaceAppAssignment(
+            zoneId = assignment.zoneId,
+            packageName = assignment.packageName,
+            activityName = assignment.activityName,
+            appLabel = assignment.appLabel,
+            launchOrder = assignment.launchOrder
+        )
+    },
+    launchDelayMs = launchDelayMs
+)
 
 @Suppress("DEPRECATION")
 private fun Activity.currentDisplayId(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
     display?.displayId ?: windowManager.defaultDisplay.displayId
 } else {
     windowManager.defaultDisplay.displayId
-}
-
-fun Activity.isRunningOnExternalDisplay(): Boolean {
-    val displayId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        display?.displayId
-    } else {
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.displayId
-    }
-    return displayId != null && displayId != Display.DEFAULT_DISPLAY
 }
 
 private fun DexDisplayState.externalDisplayIds(): List<Int> = when (this) {
@@ -1294,19 +1209,6 @@ private fun diagnosticDetails(
     assignment: ZoneAppAssignment
 ): String = "workArea=$workArea\nbounds=$bounds\n" +
     "package=${assignment.packageName}\nactivity=${assignment.activityName}"
-
-private fun AppLaunchResult.failureReason(): String = when (this) {
-    AppLaunchResult.Success -> "Không có lỗi"
-    AppLaunchResult.AppNotFound -> "Ứng dụng không còn được cài đặt"
-    AppLaunchResult.ActivityNotFound -> "Không tìm thấy màn hình khởi chạy"
-    AppLaunchResult.SecurityError -> "Không có quyền mở ứng dụng"
-    AppLaunchResult.DisplayNotAvailable -> "Màn hình DeX không còn khả dụng"
-    AppLaunchResult.LaunchNotAllowedOnDisplay -> "Hệ thống từ chối mở trên màn hình này"
-    AppLaunchResult.MultiDisplayNotSupported -> "Thiết bị không hỗ trợ màn hình phụ"
-    AppLaunchResult.BoundsNotSupported -> "ROM không hỗ trợ launch bounds"
-    AppLaunchResult.InvalidBounds -> "Kích thước vùng không hợp lệ"
-    is AppLaunchResult.UnknownError -> "Không thể mở ứng dụng"
-}
 
 private const val LAUNCH_LOG_TAG = "DexLaunch"
 private const val MAX_DELAY_SLIDER_MS = 2_000L
