@@ -36,8 +36,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,7 +51,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,13 +68,10 @@ import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
 import com.trancong.dexworkspacemanager.navigation.AppRoute
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
 import com.trancong.dexworkspacemanager.platform.dex.ExternalDisplayInfo
-import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
 import com.trancong.dexworkspacemanager.platform.dex.DexWorkArea
-import com.trancong.dexworkspacemanager.platform.dex.DexWindowLaunchStrategy
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
+import com.trancong.dexworkspacemanager.platform.applauncher.LaunchBounds
 import com.trancong.dexworkspacemanager.platform.applauncher.LayoutBoundsCalculator
-import com.trancong.dexworkspacemanager.platform.applauncher.KnownAppLaunchProfiles
-import com.trancong.dexworkspacemanager.platform.applauncher.LaunchStrategy
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
@@ -90,7 +84,7 @@ fun LayoutEditorRoute(
     val currentContext = LocalContext.current
     val density = LocalDensity.current
     val application = currentContext.applicationContext as DexWorkspaceManagerApplication
-    val manualLaunchStrategies = remember { mutableStateMapOf<String, LaunchStrategy>() }
+    var lastDiagnosticDetails by remember { mutableStateOf<String?>(null) }
     val viewModelFactory = remember(application, workspaceId) {
         LayoutEditorViewModelFactory(
             workspaceRepository = application.container.workspaceRepository,
@@ -131,27 +125,14 @@ fun LayoutEditorRoute(
     val hostActivity = currentContext.findActivity()
     val sourceDisplayId = hostActivity?.currentDisplayId()
     val detectedExternalDisplayIds = uiState.dexDisplayState.externalDisplayIds()
-    val selectedLaunchMode = when {
-        hostActivity?.isRunningOnExternalDisplay() == true ->
-            DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS
-        uiState.selectedExternalDisplayId?.let { it in detectedExternalDisplayIds } == true ->
-            DexLaunchMode.TARGET_DISPLAY_API
-        else -> DexLaunchMode.DEFAULT_ACTIVITY
+    val isRunningOnDex = hostActivity?.isRunningOnExternalDisplay() == true
+    val dexLaunchDescription = if (isRunningOnDex) {
+        "Đang chạy trực tiếp trên màn hình DeX"
+    } else if (detectedExternalDisplayIds.isNotEmpty()) {
+        "Hãy mở Workspace Manager trực tiếp trên màn hình DeX"
+    } else {
+        "Chưa phát hiện DeX"
     }
-    val dexLaunchDescription = when (selectedLaunchMode) {
-        DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS ->
-            "Đang chạy trực tiếp trên màn hình DeX"
-        DexLaunchMode.TARGET_DISPLAY_API ->
-            "Đang chạy trên điện thoại, sẽ gửi sang display DeX"
-        DexLaunchMode.DEFAULT_ACTIVITY -> "Chưa phát hiện DeX"
-    }
-    val resolvedLaunchStrategies = uiState.appAssignments.values
-        .map(ZoneAppAssignment::packageName)
-        .distinct()
-        .associateWith { packageName ->
-            manualLaunchStrategies[packageName]
-                ?: KnownAppLaunchProfiles.strategyFor(packageName)
-        }
 
     when {
         uiState.isLoadingWorkspace -> LayoutEditorLoadingState()
@@ -174,32 +155,28 @@ fun LayoutEditorRoute(
             onLaunchAppForZone = viewModel::launchAssignedApp,
             dexDisplayState = uiState.dexDisplayState,
             selectedExternalDisplayId = uiState.selectedExternalDisplayId,
-            canLaunchOnDex = selectedLaunchMode != DexLaunchMode.DEFAULT_ACTIVITY,
+            canLaunchOnDex = isRunningOnDex,
             dexLaunchDescription = dexLaunchDescription,
             sourceDisplayId = sourceDisplayId,
+            detectedExternalDisplayIds = detectedExternalDisplayIds,
+            sourceWorkArea = hostActivity?.currentExternalDisplayWorkArea(),
+            lastDiagnosticDetails = lastDiagnosticDetails,
             onRefreshDexDisplay = viewModel::refreshDexDisplayState,
             onSelectExternalDisplay = viewModel::selectExternalDisplay,
-            onLaunchAppOnDex = { zoneId ->
+            onLaunchOnDex = { zoneId ->
                 val assignment = uiState.appAssignments[zoneId]
                 val zone = LayoutTemplates.zonesFor(
                     uiState.selectedTemplate,
                     uiState.leftRatio,
                     uiState.topRatio
                 ).firstOrNull { it.id == zoneId }
-                val targetDisplay = uiState.dexDisplayState.findDisplay(
-                    uiState.selectedExternalDisplayId
-                )
-                val workArea = when (selectedLaunchMode) {
-                    DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS ->
-                        hostActivity?.currentExternalDisplayWorkArea()
-                    DexLaunchMode.TARGET_DISPLAY_API -> targetDisplay?.let {
-                        DexWorkArea(it.width, it.height)
-                    }
-                    DexLaunchMode.DEFAULT_ACTIVITY -> null
-                }
+                val workArea = hostActivity?.currentExternalDisplayWorkArea()
                 when {
                     assignment == null -> viewModel.reportLaunchError(
                         "Vùng này chưa được gán ứng dụng"
+                    )
+                    hostActivity == null || !isRunningOnDex -> viewModel.reportLaunchError(
+                        "Hãy mở Workspace Manager trực tiếp trên màn hình DeX"
                     )
                     zone == null || workArea == null -> viewModel.reportLaunchError(
                         "Không xác định được vùng làm việc DeX"
@@ -213,32 +190,23 @@ fun LayoutEditorRoute(
                                 marginPx = with(density) { 8.dp.roundToPx() }
                             )
                             Log.d(
-                                LAUNCH_SELECTION_LOG_TAG,
+                                LAUNCH_LOG_TAG,
                                 "sourceActivityDisplayId=$sourceDisplayId, " +
                                     "detectedExternalDisplayIds=$detectedExternalDisplayIds, " +
-                                    "selectedStrategy=$selectedLaunchMode, workArea=$workArea, " +
+                                    "workArea=$workArea, " +
                                     "bounds=$bounds, packageName=${assignment.packageName}"
                             )
-                            when (selectedLaunchMode) {
-                                DexLaunchMode.CURRENT_DEX_ACTIVITY_NEW_TASK_BOUNDS ->
-                                    application.container.foregroundAppLauncher
-                                        .launchFromActivityWithBounds(
-                                            hostActivity!!,
-                                            assignment.packageName,
-                                            assignment.activityName,
-                                            bounds,
-                                            LaunchStrategy.NEW_TASK_BOUNDS
-                                        )
-                                DexLaunchMode.TARGET_DISPLAY_API ->
-                                    application.container.appLauncher.launchOnDisplayWithBounds(
-                                        assignment.packageName,
-                                        assignment.activityName,
-                                        uiState.selectedExternalDisplayId!!,
-                                        bounds
-                                    )
-                                DexLaunchMode.DEFAULT_ACTIVITY ->
-                                    AppLaunchResult.DisplayNotAvailable
-                            }
+                            lastDiagnosticDetails = diagnosticDetails(
+                                workArea,
+                                bounds,
+                                assignment
+                            )
+                            application.container.foregroundAppLauncher.launchInZone(
+                                hostActivity,
+                                assignment.packageName,
+                                assignment.activityName,
+                                bounds
+                            )
                         } catch (exception: IllegalArgumentException) {
                             AppLaunchResult.InvalidBounds
                         }
@@ -246,25 +214,22 @@ fun LayoutEditorRoute(
                     }
                 }
             },
-            launchStrategies = resolvedLaunchStrategies,
-            onLaunchStrategySelected = { packageName, strategy ->
-                manualLaunchStrategies[packageName] = strategy
-            },
-            onDiagnosticLaunchInZone = { zoneId ->
+            onTestTargetDisplay = { zoneId ->
                 val assignment = uiState.appAssignments[zoneId]
-                val activity = currentContext.findActivity()
                 val zone = LayoutTemplates.zonesFor(
                     uiState.selectedTemplate,
                     uiState.leftRatio,
                     uiState.topRatio
                 ).firstOrNull { it.id == zoneId }
-                val workArea = activity?.currentExternalDisplayWorkArea()
+                val targetDisplayId = uiState.selectedExternalDisplayId
+                val targetDisplay = uiState.dexDisplayState.findDisplay(targetDisplayId)
+                val workArea = targetDisplay?.let { DexWorkArea(it.width, it.height) }
                 when {
                     assignment == null -> viewModel.reportLaunchError(
                         "Vùng này chưa được gán ứng dụng"
                     )
-                    activity == null -> viewModel.reportLaunchError(
-                        "Không tìm thấy cửa sổ hiện tại để mở ứng dụng"
+                    targetDisplayId == null -> viewModel.reportLaunchError(
+                        "Chưa xác định được display DeX"
                     )
                     zone == null || workArea == null ->
                         viewModel.handleBoundsLaunchResult(AppLaunchResult.InvalidBounds)
@@ -276,20 +241,23 @@ fun LayoutEditorRoute(
                                 workArea.usableHeight,
                                 marginPx = with(density) { 8.dp.roundToPx() }
                             )
-                            val strategy = resolvedLaunchStrategies[assignment.packageName]
-                                ?: LaunchStrategy.STANDARD_BOUNDS
                             Log.d(
-                                DEX_BOUNDS_LOG_TAG,
-                                "packageName=${assignment.packageName}, strategy=$strategy, " +
-                                    "bounds=$bounds, activityName=${assignment.activityName}"
+                                LAUNCH_LOG_TAG,
+                                "diagnostic targetDisplayId=$targetDisplayId, workArea=$workArea, " +
+                                    "bounds=$bounds, packageName=${assignment.packageName}, " +
+                                    "activityName=${assignment.activityName}"
                             )
-                            application.container.foregroundAppLauncher
-                                .launchFromActivityWithBounds(
-                                    activity,
+                            lastDiagnosticDetails = diagnosticDetails(
+                                workArea,
+                                bounds,
+                                assignment
+                            )
+                            application.container.appLauncher
+                                .launchOnTargetDisplayForDiagnostics(
                                     assignment.packageName,
                                     assignment.activityName,
-                                    bounds,
-                                    strategy
+                                    targetDisplayId,
+                                    bounds
                                 )
                         } catch (exception: IllegalArgumentException) {
                             AppLaunchResult.InvalidBounds
@@ -298,89 +266,6 @@ fun LayoutEditorRoute(
                     }
                 }
             },
-            selectedTestStrategy = uiState.selectedTestStrategy,
-            onSelectTestStrategy = viewModel::selectTestStrategy,
-            onTestLaunchInZone = { zoneId ->
-                val assignment = uiState.appAssignments[zoneId]
-                val activity = currentContext.findActivity()
-                val zone = LayoutTemplates.zonesFor(
-                    uiState.selectedTemplate,
-                    uiState.leftRatio,
-                    uiState.topRatio
-                ).firstOrNull { it.id == zoneId }
-                val sourceDisplayId = activity?.currentDisplayId()
-                val targetDisplayId = uiState.selectedExternalDisplayId
-                val targetDisplay = uiState.dexDisplayState.findDisplay(targetDisplayId)
-                val workArea = when (uiState.selectedTestStrategy) {
-                    DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS -> targetDisplay?.let {
-                        DexWorkArea(it.width, it.height)
-                    }
-                    DexWindowLaunchStrategy.LEGACY_NEW_TASK_AND_BOUNDS ->
-                        activity?.currentExternalDisplayWorkArea()
-                }
-                when {
-                    assignment == null || zone == null ->
-                        viewModel.reportCompatibilityError("Vùng chưa có ứng dụng hợp lệ")
-                    uiState.selectedTestStrategy ==
-                        DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS &&
-                        targetDisplayId == null ->
-                        viewModel.reportCompatibilityError("Chưa xác định được display DeX")
-                    uiState.selectedTestStrategy ==
-                        DexWindowLaunchStrategy.LEGACY_NEW_TASK_AND_BOUNDS &&
-                        (activity == null || sourceDisplayId == Display.DEFAULT_DISPLAY) ->
-                        viewModel.reportCompatibilityError(
-                            "Hãy mở DeX Workspace Manager trực tiếp trên màn hình DeX"
-                        )
-                    workArea == null ->
-                        viewModel.reportCompatibilityError("Không xác định được vùng làm việc DeX")
-                    else -> {
-                        val result = try {
-                            val bounds = LayoutBoundsCalculator.calculate(
-                                zone,
-                                workArea.width,
-                                workArea.usableHeight,
-                                marginPx = with(density) { 8.dp.roundToPx() }
-                            )
-                            val strategy = uiState.selectedTestStrategy
-                            Log.d(
-                                COMPATIBILITY_LOG_TAG,
-                                "manufacturer=${Build.MANUFACTURER}, model=${Build.MODEL}, " +
-                                    "sdk=${Build.VERSION.SDK_INT}, strategy=$strategy, " +
-                                    "sourceDisplayId=$sourceDisplayId, " +
-                                    "targetDisplayId=$targetDisplayId, " +
-                                    "packageName=${assignment.packageName}, " +
-                                    "activityName=${assignment.activityName}, bounds=$bounds"
-                            )
-                            when (strategy) {
-                                DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS ->
-                                    application.container.appLauncher.launchOnDisplayWithBounds(
-                                        assignment.packageName,
-                                        assignment.activityName,
-                                        targetDisplayId!!,
-                                        bounds
-                                    )
-                                DexWindowLaunchStrategy.LEGACY_NEW_TASK_AND_BOUNDS ->
-                                    application.container.foregroundAppLauncher
-                                        .launchFromActivityWithBounds(
-                                            activity!!,
-                                            assignment.packageName,
-                                            assignment.activityName,
-                                            bounds,
-                                            LaunchStrategy.NEW_TASK_BOUNDS
-                                        )
-                            }
-                        } catch (exception: IllegalArgumentException) {
-                            AppLaunchResult.InvalidBounds
-                        }
-                        Log.d(COMPATIBILITY_LOG_TAG, "result=$result")
-                        viewModel.handleCompatibilityResult(uiState.selectedTestStrategy, result)
-                    }
-                }
-            },
-            lastCompatibilityMessage = uiState.lastCompatibilityMessage,
-            lastCompatibilityError = uiState.lastCompatibilityError,
-            onCompatibilityMessageShown = viewModel::consumeCompatibilityMessage,
-            onCompatibilityErrorShown = viewModel::consumeCompatibilityError,
             onBackClick = onBackClick,
             workspaceName = uiState.workspaceName,
             onWorkspaceNameChange = viewModel::updateWorkspaceName,
@@ -455,19 +340,13 @@ fun LayoutEditorScreen(
     canLaunchOnDex: Boolean,
     dexLaunchDescription: String,
     sourceDisplayId: Int?,
+    detectedExternalDisplayIds: List<Int>,
+    sourceWorkArea: DexWorkArea?,
+    lastDiagnosticDetails: String?,
     onRefreshDexDisplay: () -> Unit,
     onSelectExternalDisplay: (Int) -> Unit,
-    onLaunchAppOnDex: (String) -> Unit,
-    launchStrategies: Map<String, LaunchStrategy>,
-    onLaunchStrategySelected: (String, LaunchStrategy) -> Unit,
-    onDiagnosticLaunchInZone: (String) -> Unit,
-    selectedTestStrategy: DexWindowLaunchStrategy,
-    onSelectTestStrategy: (DexWindowLaunchStrategy) -> Unit,
-    onTestLaunchInZone: (String) -> Unit,
-    lastCompatibilityMessage: String?,
-    lastCompatibilityError: String?,
-    onCompatibilityMessageShown: () -> Unit,
-    onCompatibilityErrorShown: () -> Unit,
+    onLaunchOnDex: (String) -> Unit,
+    onTestTargetDisplay: (String) -> Unit,
     onBackClick: () -> Unit,
     workspaceName: String,
     onWorkspaceNameChange: (String) -> Unit,
@@ -521,19 +400,6 @@ fun LayoutEditorScreen(
             onLaunchErrorShown()
         }
     }
-    LaunchedEffect(lastCompatibilityMessage) {
-        lastCompatibilityMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            onCompatibilityMessageShown()
-        }
-    }
-    LaunchedEffect(lastCompatibilityError) {
-        lastCompatibilityError?.let {
-            snackbarHostState.showSnackbar(it)
-            onCompatibilityErrorShown()
-        }
-    }
-
     if (isDiagnosticsVisible) {
         AlertDialog(
             onDismissRequest = { isDiagnosticsVisible = false },
@@ -542,27 +408,26 @@ fun LayoutEditorScreen(
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(dexLaunchDescription, style = MaterialTheme.typography.bodySmall)
                     Text(
-                        "SDK ${Build.VERSION.SDK_INT} • ${Build.MODEL}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
                         "Source display: $sourceDisplayId • Target display: " +
                             "$selectedExternalDisplayId",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    Text(
+                        "External displays: $detectedExternalDisplayIds",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text("Source work area: $sourceWorkArea", style = MaterialTheme.typography.bodySmall)
+                    lastDiagnosticDetails?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (
                         dexDisplayState is DexDisplayState.Connected ||
                         dexDisplayState is DexDisplayState.MultipleDisplays
                     ) {
-                        CompatibilityTestPanel(
-                            strategy = selectedTestStrategy,
+                        TargetDisplayDiagnosticPanel(
                             zones = zones.filter { appAssignments.containsKey(it.id) },
                             appAssignments = appAssignments,
-                            launchStrategies = launchStrategies,
-                            onSelectStrategy = onSelectTestStrategy,
-                            onLaunchStrategySelected = onLaunchStrategySelected,
-                            onDiagnosticLaunchInZone = onDiagnosticLaunchInZone,
-                            onTestZone = onTestLaunchInZone
+                            onTestZone = onTestTargetDisplay
                         )
                     } else {
                         Text(
@@ -665,7 +530,7 @@ fun LayoutEditorScreen(
                     onRemoveAppFromZone = onRemoveAppFromZone,
                     onLaunchAppForZone = onLaunchAppForZone,
                     canLaunchOnDex = canLaunchOnDex,
-                    onLaunchAppOnDex = onLaunchAppOnDex,
+                    onLaunchOnDex = onLaunchOnDex,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -768,14 +633,9 @@ private fun DisplaySummary(display: ExternalDisplayInfo) {
 }
 
 @Composable
-private fun CompatibilityTestPanel(
-    strategy: DexWindowLaunchStrategy,
+private fun TargetDisplayDiagnosticPanel(
     zones: List<LayoutZone>,
     appAssignments: Map<String, ZoneAppAssignment>,
-    launchStrategies: Map<String, LaunchStrategy>,
-    onSelectStrategy: (DexWindowLaunchStrategy) -> Unit,
-    onLaunchStrategySelected: (String, LaunchStrategy) -> Unit,
-    onDiagnosticLaunchInZone: (String) -> Unit,
     onTestZone: (String) -> Unit
 ) {
     Surface(
@@ -784,17 +644,7 @@ private fun CompatibilityTestPanel(
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            Text("Kiểm tra tương thích", style = MaterialTheme.typography.titleSmall)
-            DexWindowLaunchStrategy.entries.forEach { option ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = strategy == option,
-                        onClick = { onSelectStrategy(option) }
-                    )
-                    Text(option.testLabel())
-                }
-            }
-            Text("Đang chọn: ${strategy.testLabel()}", style = MaterialTheme.typography.bodySmall)
+            Text("Thử API màn hình đích", style = MaterialTheme.typography.titleSmall)
             zones.forEach { zone ->
                 val assignment = appAssignments[zone.id] ?: return@forEach
                 Row(
@@ -802,22 +652,9 @@ private fun CompatibilityTestPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("${zone.label}: ${assignment.appLabel}")
-                        LaunchStrategyMenu(
-                            selectedStrategy = assignmentStrategy(assignment, launchStrategies),
-                            onStrategySelected = { selected ->
-                                onLaunchStrategySelected(assignment.packageName, selected)
-                            }
-                        )
-                    }
-                    Column {
-                        TextButton(onClick = { onDiagnosticLaunchInZone(zone.id) }) {
-                            Text("Mở theo cấu hình")
-                        }
-                        TextButton(onClick = { onTestZone(zone.id) }) {
-                            Text("Mở thử ${zone.label}")
-                        }
+                    Text("${zone.label}: ${assignment.appLabel}")
+                    TextButton(onClick = { onTestZone(zone.id) }) {
+                        Text("Thử API đích")
                     }
                 }
             }
@@ -873,7 +710,7 @@ private fun LayoutPreview(
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
     canLaunchOnDex: Boolean,
-    onLaunchAppOnDex: (String) -> Unit,
+    onLaunchOnDex: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -905,7 +742,7 @@ private fun LayoutPreview(
                         onRemoveClick = { onRemoveAppFromZone(zone.id) },
                         onLaunchClick = { onLaunchAppForZone(zone.id) },
                         isDexLaunchEnabled = canLaunchOnDex,
-                        onLaunchOnDexClick = { onLaunchAppOnDex(zone.id) },
+                        onLaunchOnDexClick = { onLaunchOnDex(zone.id) },
                         modifier = Modifier
                             .offset(
                                 x = maxWidth * zone.x,
@@ -1061,21 +898,15 @@ private fun LayoutEditorScreenPreview() {
             dexDisplayState = DexDisplayState.NotConnected,
             selectedExternalDisplayId = null,
             canLaunchOnDex = false,
-            dexLaunchDescription = "Cơ chế mở: Mặc định",
+            dexLaunchDescription = "Chưa phát hiện DeX",
             sourceDisplayId = null,
+            detectedExternalDisplayIds = emptyList(),
+            sourceWorkArea = null,
+            lastDiagnosticDetails = null,
             onRefreshDexDisplay = {},
             onSelectExternalDisplay = {},
-            onLaunchAppOnDex = {},
-            launchStrategies = emptyMap(),
-            onLaunchStrategySelected = { _, _ -> },
-            onDiagnosticLaunchInZone = {},
-            selectedTestStrategy = DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS,
-            onSelectTestStrategy = {},
-            onTestLaunchInZone = {},
-            lastCompatibilityMessage = null,
-            lastCompatibilityError = null,
-            onCompatibilityMessageShown = {},
-            onCompatibilityErrorShown = {},
+            onLaunchOnDex = {},
+            onTestTargetDisplay = {},
             onBackClick = {},
             workspaceName = "Workspace của tôi",
             onWorkspaceNameChange = {},
@@ -1147,57 +978,11 @@ private fun DexDisplayState.findDisplay(displayId: Int?): ExternalDisplayInfo? =
     is DexDisplayState.Error -> null
 }
 
-private fun DexWindowLaunchStrategy.testLabel(): String = when (this) {
-    DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS -> "API màn hình đích"
-    DexWindowLaunchStrategy.LEGACY_NEW_TASK_AND_BOUNDS -> "Task mới từ DeX"
-}
+private fun diagnosticDetails(
+    workArea: DexWorkArea,
+    bounds: LaunchBounds,
+    assignment: ZoneAppAssignment
+): String = "workArea=$workArea\nbounds=$bounds\n" +
+    "package=${assignment.packageName}\nactivity=${assignment.activityName}"
 
-private const val DEX_BOUNDS_LOG_TAG = "DexLaunchBounds"
-private const val COMPATIBILITY_LOG_TAG = "DexCompatibilityTest"
-private const val LAUNCH_SELECTION_LOG_TAG = "DexLaunchSelection"
-
-private fun assignmentStrategy(
-    assignment: ZoneAppAssignment?,
-    launchStrategies: Map<String, LaunchStrategy>
-): LaunchStrategy = assignment?.let { launchStrategies[it.packageName] }
-    ?: LaunchStrategy.STANDARD_BOUNDS
-
-@Composable
-private fun LaunchStrategyMenu(
-    selectedStrategy: LaunchStrategy,
-    onStrategySelected: (LaunchStrategy) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { expanded = true }) {
-            Text(selectedStrategy.label())
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            MANUAL_LAUNCH_STRATEGIES.forEach { strategy ->
-                DropdownMenuItem(
-                    text = { Text(strategy.label()) },
-                    onClick = {
-                        onStrategySelected(strategy)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-private fun LaunchStrategy.label(): String = when (this) {
-    LaunchStrategy.STANDARD_BOUNDS -> "Mở chuẩn"
-    LaunchStrategy.NEW_TASK_BOUNDS -> "Mở task mới"
-    LaunchStrategy.CLEAR_TASK_BOUNDS -> "Xóa task và mở"
-    LaunchStrategy.LEGACY_DEX_BOUNDS -> "Mở DeX tương thích"
-}
-
-private val MANUAL_LAUNCH_STRATEGIES = listOf(
-    LaunchStrategy.STANDARD_BOUNDS,
-    LaunchStrategy.NEW_TASK_BOUNDS,
-    LaunchStrategy.LEGACY_DEX_BOUNDS
-)
+private const val LAUNCH_LOG_TAG = "DexLaunch"

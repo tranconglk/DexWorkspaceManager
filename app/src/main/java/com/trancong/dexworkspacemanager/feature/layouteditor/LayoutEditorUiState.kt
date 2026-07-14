@@ -1,8 +1,6 @@
 package com.trancong.dexworkspacemanager.feature.layouteditor
 
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
-import com.trancong.dexworkspacemanager.platform.dex.DexLaunchMode
-import com.trancong.dexworkspacemanager.platform.dex.DexWindowLaunchStrategy
 
 data class LayoutEditorUiState(
     val workspaceId: Long? = null,
@@ -21,12 +19,5 @@ data class LayoutEditorUiState(
     val launchMessage: String? = null,
     val launchError: String? = null,
     val dexDisplayState: DexDisplayState = DexDisplayState.NotConnected,
-    val selectedExternalDisplayId: Int? = null,
-    val recommendedDexLaunchMode: DexLaunchMode = DexLaunchMode.DEFAULT_ACTIVITY,
-    val canLaunchOnDex: Boolean = false,
-    val dexLaunchDescription: String = "Chưa phát hiện DeX",
-    val selectedTestStrategy: DexWindowLaunchStrategy =
-        DexWindowLaunchStrategy.MODERN_DISPLAY_AND_BOUNDS,
-    val lastCompatibilityMessage: String? = null,
-    val lastCompatibilityError: String? = null
+    val selectedExternalDisplayId: Int? = null
 )

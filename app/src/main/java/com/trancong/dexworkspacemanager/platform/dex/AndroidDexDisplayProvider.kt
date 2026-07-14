@@ -45,36 +45,6 @@ class AndroidDexDisplayProvider(context: Context) : DexDisplayProvider {
         }
     }
 
-    override fun determineRecommendedLaunchMode(): DexLaunchMode {
-        val hasExternalDisplay = when (getCurrentState()) {
-            is DexDisplayState.Connected,
-            is DexDisplayState.MultipleDisplays -> true
-            DexDisplayState.NotConnected,
-            is DexDisplayState.Error -> false
-        }
-        return if (hasExternalDisplay) {
-            DexLaunchMode.TARGET_DISPLAY_API
-        } else {
-            DexLaunchMode.DEFAULT_ACTIVITY
-        }
-    }
-
-    override fun getRecommendedWorkArea(): DexWorkArea? {
-        val displays = try {
-            getExternalDisplays()
-        } catch (exception: Exception) {
-            return null
-        }
-        val display = displays.singleOrNull { it.isLikelyDexDisplay }
-            ?: displays.singleOrNull()
-            ?: return null
-        return DexWorkArea(
-            width = display.width,
-            height = display.height,
-            bottomInset = 0 // Experimental: public Display APIs do not expose the DeX taskbar inset.
-        )
-    }
-
     @Suppress("DEPRECATION")
     private fun toExternalDisplayInfo(display: Display): ExternalDisplayInfo {
         val metrics = DisplayMetrics()
