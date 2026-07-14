@@ -3,12 +3,16 @@ package com.trancong.dexworkspacemanager.feature.layouteditor
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -57,6 +61,8 @@ fun LayoutEditorScreen(
     onSaveClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val zones = LayoutTemplates.zonesFor(selectedTemplate)
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -80,7 +86,7 @@ fun LayoutEditorScreen(
                 contentAlignment = Alignment.Center
             ) {
                 LayoutPreview(
-                    template = selectedTemplate,
+                    zones = zones,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -146,7 +152,7 @@ private fun EditorTopBar(
 
 @Composable
 private fun LayoutPreview(
-    template: LayoutTemplate,
+    zones: List<LayoutZone>,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -158,48 +164,27 @@ private fun LayoutPreview(
             .clip(shape),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
-        when (template) {
-            LayoutTemplate.TWO_ZONES -> Row(Modifier.fillMaxSize()) {
-                PreviewZone(
-                    label = "Vùng 1",
-                    modifier = Modifier.weight(1f)
-                )
-                PreviewZone(
-                    label = "Vùng 2",
-                    modifier = Modifier
-                        .weight(1f)
-                        .border(0.5.dp, borderColor)
-                )
-            }
-
-            LayoutTemplate.THREE_ZONES -> Row(Modifier.fillMaxSize()) {
-                PreviewZone(
-                    label = "Vùng 1",
-                    modifier = Modifier.weight(0.65f)
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(0.35f)
-                        .border(0.5.dp, borderColor)
-                ) {
-                    PreviewZone(
-                        label = "Vùng 2",
-                        modifier = Modifier.weight(1f)
-                    )
-                    PreviewZone(
-                        label = "Vùng 3",
-                        modifier = Modifier
-                            .weight(1f)
-                            .border(0.5.dp, borderColor)
-                    )
-                }
-            }
-
-            LayoutTemplate.EMPTY -> Box(
+        if (zones.isEmpty()) {
+            Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = "Chưa có vùng nào")
+            }
+        } else {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                zones.forEach { zone ->
+                    PreviewZone(
+                        zone = zone,
+                        modifier = Modifier
+                            .offset(
+                                x = maxWidth * zone.x,
+                                y = maxHeight * zone.y
+                            )
+                            .width(maxWidth * zone.width)
+                            .height(maxHeight * zone.height)
+                    )
+                }
             }
         }
     }
@@ -207,15 +192,18 @@ private fun LayoutPreview(
 
 @Composable
 private fun PreviewZone(
-    label: String,
+    zone: LayoutZone,
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.border(
+            width = 0.5.dp,
+            color = MaterialTheme.colorScheme.outline
+        ),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
+            text = zone.label,
             style = MaterialTheme.typography.titleMedium
         )
     }
