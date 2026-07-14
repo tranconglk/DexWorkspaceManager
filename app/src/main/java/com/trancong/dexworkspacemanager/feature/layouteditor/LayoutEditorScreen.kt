@@ -30,36 +30,33 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 @Composable
 fun LayoutEditorRoute(
     onBackClick: () -> Unit,
-    onSaveClick: () -> Unit = {}
+    onSaveClick: () -> Unit = {},
+    viewModel: LayoutEditorViewModel = viewModel()
 ) {
-    var selectedTemplate by rememberSaveable {
-        mutableStateOf(LayoutTemplate.THREE_ZONES)
-    }
-    var leftRatio by rememberSaveable { mutableStateOf(0.65f) }
-    var topRatio by rememberSaveable { mutableStateOf(0.5f) }
+    val uiState by viewModel.uiState.collectAsState()
 
     LayoutEditorScreen(
-        selectedTemplate = selectedTemplate,
-        onTemplateSelected = { selectedTemplate = it },
-        leftRatio = leftRatio,
-        onLeftRatioChange = { leftRatio = it },
-        topRatio = topRatio,
-        onTopRatioChange = { topRatio = it },
+        selectedTemplate = uiState.selectedTemplate,
+        onTemplateSelected = viewModel::selectTemplate,
+        onResetLayout = viewModel::resetLayout,
+        leftRatio = uiState.leftRatio,
+        onLeftRatioChange = viewModel::updateLeftRatio,
+        topRatio = uiState.topRatio,
+        onTopRatioChange = viewModel::updateTopRatio,
         onBackClick = onBackClick,
         onSaveClick = onSaveClick
     )
@@ -69,6 +66,7 @@ fun LayoutEditorRoute(
 fun LayoutEditorScreen(
     selectedTemplate: LayoutTemplate,
     onTemplateSelected: (LayoutTemplate) -> Unit,
+    onResetLayout: () -> Unit,
     leftRatio: Float,
     onLeftRatioChange: (Float) -> Unit,
     topRatio: Float,
@@ -135,7 +133,7 @@ fun LayoutEditorScreen(
                     Text(text = "Mẫu 3 vùng")
                 }
                 Button(
-                    onClick = { onTemplateSelected(LayoutTemplate.EMPTY) },
+                    onClick = onResetLayout,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(text = "Xóa bố cục")
@@ -309,6 +307,7 @@ private fun LayoutEditorScreenPreview() {
         LayoutEditorScreen(
             selectedTemplate = LayoutTemplate.THREE_ZONES,
             onTemplateSelected = {},
+            onResetLayout = {},
             leftRatio = 0.65f,
             onLeftRatioChange = {},
             topRatio = 0.5f,
