@@ -1,6 +1,10 @@
 package com.trancong.dexworkspacemanager.feature.layouteditor
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -8,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -32,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
@@ -44,10 +50,13 @@ fun LayoutEditorRoute(
     var selectedTemplate by rememberSaveable {
         mutableStateOf(LayoutTemplate.THREE_ZONES)
     }
+    var leftRatio by rememberSaveable { mutableStateOf(0.65f) }
 
     LayoutEditorScreen(
         selectedTemplate = selectedTemplate,
         onTemplateSelected = { selectedTemplate = it },
+        leftRatio = leftRatio,
+        onLeftRatioChange = { leftRatio = it },
         onBackClick = onBackClick,
         onSaveClick = onSaveClick
     )
@@ -57,11 +66,16 @@ fun LayoutEditorRoute(
 fun LayoutEditorScreen(
     selectedTemplate: LayoutTemplate,
     onTemplateSelected: (LayoutTemplate) -> Unit,
+    leftRatio: Float,
+    onLeftRatioChange: (Float) -> Unit,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val zones = LayoutTemplates.zonesFor(selectedTemplate)
+    val zones = LayoutTemplates.zonesFor(
+        template = selectedTemplate,
+        leftRatio = leftRatio
+    )
 
     Scaffold(
         modifier = modifier,
@@ -87,6 +101,9 @@ fun LayoutEditorScreen(
             ) {
                 LayoutPreview(
                     zones = zones,
+                    selectedTemplate = selectedTemplate,
+                    leftRatio = leftRatio,
+                    onLeftRatioChange = onLeftRatioChange,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 10f)
@@ -153,6 +170,9 @@ private fun EditorTopBar(
 @Composable
 private fun LayoutPreview(
     zones: List<LayoutZone>,
+    selectedTemplate: LayoutTemplate,
+    leftRatio: Float,
+    onLeftRatioChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val borderColor = MaterialTheme.colorScheme.outline
@@ -173,6 +193,8 @@ private fun LayoutPreview(
             }
         } else {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val previewWidthPx = constraints.maxWidth.toFloat()
+
                 zones.forEach { zone ->
                     PreviewZone(
                         zone = zone,
@@ -184,6 +206,36 @@ private fun LayoutPreview(
                             .width(maxWidth * zone.width)
                             .height(maxHeight * zone.height)
                     )
+                }
+
+                if (selectedTemplate == LayoutTemplate.THREE_ZONES) {
+                    val draggableState = rememberDraggableState { deltaPx ->
+                        val ratioDelta = deltaPx / previewWidthPx
+                        val newRatio = (leftRatio + ratioDelta).coerceIn(0.4f, 0.8f)
+                        onLeftRatioChange(newRatio)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = maxWidth * leftRatio - 12.dp)
+                            .width(24.dp)
+                            .fillMaxHeight()
+                            .zIndex(1f)
+                            .draggable(
+                                state = draggableState,
+                                orientation = Orientation.Horizontal
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .padding(vertical = 8.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
                 }
             }
         }
@@ -216,6 +268,8 @@ private fun LayoutEditorScreenPreview() {
         LayoutEditorScreen(
             selectedTemplate = LayoutTemplate.THREE_ZONES,
             onTemplateSelected = {},
+            leftRatio = 0.65f,
+            onLeftRatioChange = {},
             onBackClick = {},
             onSaveClick = {}
         )
