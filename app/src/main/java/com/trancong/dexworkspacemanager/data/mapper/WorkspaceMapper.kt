@@ -13,7 +13,8 @@ fun WorkspaceEntity.toDomain(): Workspace = Workspace(
     leftRatio = leftRatio,
     topRatio = topRatio,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    launchDelayMs = launchDelayMs
 )
 
 fun WorkspaceWithAssignments.toDomain(): Workspace = workspace.toDomain().copy(
@@ -27,5 +28,6 @@ fun Workspace.toEntity(): WorkspaceEntity = WorkspaceEntity(
     leftRatio = leftRatio,
     topRatio = topRatio,
     createdAt = createdAt,
-    updatedAt = updatedAt
+    updatedAt = updatedAt,
+    launchDelayMs = launchDelayMs
 )

@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -79,6 +82,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun LayoutEditorRoute(
@@ -158,6 +162,10 @@ fun LayoutEditorRoute(
             topRatio = uiState.topRatio,
             onTopRatioChange = viewModel::updateTopRatio,
             appAssignments = uiState.appAssignments,
+            launchDelayMs = uiState.launchDelayMs,
+            onLaunchDelayChange = viewModel::updateLaunchDelay,
+            onMoveAssignmentUp = viewModel::moveAssignmentUp,
+            onMoveAssignmentDown = viewModel::moveAssignmentDown,
             onZoneClick = onZoneClick,
             onRemoveAppFromZone = viewModel::removeAppFromZone,
             onLaunchAppForZone = viewModel::launchAssignedApp,
@@ -233,9 +241,15 @@ fun LayoutEditorRoute(
                         uiState.leftRatio,
                         uiState.topRatio
                     )
-                    val launchItems = zones.mapNotNull { zone ->
-                        uiState.appAssignments[zone.id]?.let { assignment -> zone to assignment }
-                    }
+                    val zonesById = zones.associateBy(LayoutZone::id)
+                    val launchItems = uiState.appAssignments.values
+                        .filter { it.zoneId in zonesById }
+                        .sortedWith(
+                            compareBy<ZoneAppAssignment> { it.launchOrder }
+                                .thenBy { it.zoneId }
+                        )
+                        .map { assignment -> zonesById.getValue(assignment.zoneId) to assignment }
+                    val launchDelayMs = uiState.launchDelayMs
                     when {
                         activity == null || !activity.isRunningOnExternalDisplay() ->
                             viewModel.finishWorkspaceLaunch(
@@ -311,7 +325,7 @@ fun LayoutEditorRoute(
                                                 currentAppLabel = assignment.appLabel
                                             )
                                             if (index < launchItems.lastIndex) {
-                                                delay(DEFAULT_WORKSPACE_LAUNCH_DELAY_MS)
+                                                delay(launchDelayMs)
                                             }
                                         }
                                         viewModel.finishWorkspaceLaunch(
@@ -462,6 +476,10 @@ fun LayoutEditorScreen(
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
     appAssignments: Map<String, ZoneAppAssignment>,
+    launchDelayMs: Long,
+    onLaunchDelayChange: (Long) -> Unit,
+    onMoveAssignmentUp: (String) -> Unit,
+    onMoveAssignmentDown: (String) -> Unit,
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
@@ -688,6 +706,18 @@ fun LayoutEditorScreen(
                 )
             }
 
+            LaunchConfigurationSection(
+                zones = zones,
+                assignments = appAssignments.values.sortedWith(
+                    compareBy<ZoneAppAssignment> { it.launchOrder }.thenBy { it.zoneId }
+                ),
+                launchDelayMs = launchDelayMs,
+                enabled = !workspaceLaunchProgress.isRunning,
+                onMoveUp = onMoveAssignmentUp,
+                onMoveDown = onMoveAssignmentDown,
+                onDelayChange = onLaunchDelayChange
+            )
+
             Button(
                 onClick = onLaunchWorkspace,
                 enabled = appAssignments.isNotEmpty() &&
@@ -744,6 +774,85 @@ fun LayoutEditorScreen(
                     Text(text = "Xóa bố cục")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun LaunchConfigurationSection(
+    zones: List<LayoutZone>,
+    assignments: List<ZoneAppAssignment>,
+    launchDelayMs: Long,
+    enabled: Boolean,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
+    onDelayChange: (Long) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Thứ tự khởi chạy", style = MaterialTheme.typography.titleMedium)
+            if (assignments.isEmpty()) {
+                Text("Chưa có ứng dụng được gán", style = MaterialTheme.typography.bodySmall)
+            } else {
+                assignments.forEachIndexed { index, assignment ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${index + 1}.", modifier = Modifier.width(28.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(assignment.appLabel)
+                            Text(
+                                zones.firstOrNull { it.id == assignment.zoneId }?.label
+                                    ?: assignment.zoneId,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveUp(assignment.zoneId) },
+                            enabled = enabled && index > 0
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Đưa ${assignment.appLabel} lên"
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveDown(assignment.zoneId) },
+                            enabled = enabled && index < assignments.lastIndex
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Đưa ${assignment.appLabel} xuống"
+                            )
+                        }
+                    }
+                }
+            }
+
+            Text(
+                "Thời gian chờ giữa các ứng dụng",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text("$launchDelayMs ms")
+            Slider(
+                value = launchDelayMs.coerceIn(0L, MAX_DELAY_SLIDER_MS).toFloat(),
+                onValueChange = { value ->
+                    val steppedValue =
+                        (value / DELAY_SLIDER_STEP_MS).roundToInt() * DELAY_SLIDER_STEP_MS
+                    onDelayChange(steppedValue.toLong())
+                },
+                enabled = enabled,
+                valueRange = 0f..MAX_DELAY_SLIDER_MS.toFloat(),
+                steps = DELAY_SLIDER_STEPS
+            )
         }
     }
 }
@@ -1082,6 +1191,10 @@ private fun LayoutEditorScreenPreview() {
             topRatio = 0.5f,
             onTopRatioChange = {},
             appAssignments = emptyMap(),
+            launchDelayMs = 400L,
+            onLaunchDelayChange = {},
+            onMoveAssignmentUp = {},
+            onMoveAssignmentDown = {},
             onZoneClick = {},
             onRemoveAppFromZone = {},
             onLaunchAppForZone = {},
@@ -1196,4 +1309,6 @@ private fun AppLaunchResult.failureReason(): String = when (this) {
 }
 
 private const val LAUNCH_LOG_TAG = "DexLaunch"
-private const val DEFAULT_WORKSPACE_LAUNCH_DELAY_MS = 400L
+private const val MAX_DELAY_SLIDER_MS = 2_000L
+private const val DELAY_SLIDER_STEP_MS = 100
+private const val DELAY_SLIDER_STEPS = 19

@@ -42,7 +42,9 @@ class LayoutEditorViewModel(
             ).mapTo(mutableSetOf(), LayoutZone::id)
             currentState.copy(
                 selectedTemplate = template,
-                appAssignments = currentState.appAssignments.filterKeys(validZoneIds::contains)
+                appAssignments = currentState.appAssignments
+                    .filterKeys(validZoneIds::contains)
+                    .normalizedLaunchOrder()
             )
         }
     }
@@ -74,8 +76,18 @@ class LayoutEditorViewModel(
         activityName: String,
         appLabel: String
     ) {
-        val assignment = ZoneAppAssignment(zoneId, packageName, activityName, appLabel)
         _uiState.update { currentState ->
+            val launchOrder = currentState.appAssignments[zoneId]?.launchOrder
+                ?: ((currentState.appAssignments.values.maxOfOrNull {
+                    it.launchOrder
+                } ?: -1) + 1)
+            val assignment = ZoneAppAssignment(
+                zoneId = zoneId,
+                packageName = packageName,
+                activityName = activityName,
+                appLabel = appLabel,
+                launchOrder = launchOrder
+            )
             currentState.copy(
                 appAssignments = currentState.appAssignments + (zoneId to assignment)
             )
@@ -84,8 +96,22 @@ class LayoutEditorViewModel(
 
     fun removeAppFromZone(zoneId: String) {
         _uiState.update { currentState ->
-            currentState.copy(appAssignments = currentState.appAssignments - zoneId)
+            currentState.copy(
+                appAssignments = (currentState.appAssignments - zoneId).normalizedLaunchOrder()
+            )
         }
+    }
+
+    fun updateLaunchDelay(delayMs: Long) {
+        _uiState.update { it.copy(launchDelayMs = delayMs.coerceIn(0L, 5_000L)) }
+    }
+
+    fun moveAssignmentUp(zoneId: String) {
+        moveAssignment(zoneId, direction = -1)
+    }
+
+    fun moveAssignmentDown(zoneId: String) {
+        moveAssignment(zoneId, direction = 1)
     }
 
     fun launchAssignedApp(zoneId: String) {
@@ -413,7 +439,8 @@ class LayoutEditorViewModel(
             topRatio = currentState.topRatio,
             createdAt = createdAt,
             updatedAt = timestamp,
-            appAssignments = currentState.appAssignments.values.map { it.toDomain() }
+            appAssignments = currentState.appAssignments.values.map { it.toDomain() },
+            launchDelayMs = currentState.launchDelayMs
         )
 
         _uiState.update {
@@ -498,6 +525,7 @@ class LayoutEditorViewModel(
                             selectedTemplate = workspace.template,
                             leftRatio = workspace.leftRatio,
                             topRatio = workspace.topRatio,
+                            launchDelayMs = workspace.launchDelayMs,
                             appAssignments = workspace.appAssignments
                                 .map { it.toEditorAssignment() }
                                 .associateBy(ZoneAppAssignment::zoneId),
@@ -522,4 +550,34 @@ class LayoutEditorViewModel(
     private companion object {
         const val MAX_FAILURE_LABELS_IN_MESSAGE = 3
     }
+
+    private fun moveAssignment(zoneId: String, direction: Int) {
+        _uiState.update { currentState ->
+            val ordered = currentState.appAssignments.values
+                .sortedWith(assignmentOrderComparator)
+                .toMutableList()
+            val currentIndex = ordered.indexOfFirst { it.zoneId == zoneId }
+            val targetIndex = currentIndex + direction
+            if (currentIndex == -1 || targetIndex !in ordered.indices) {
+                currentState
+            } else {
+                val moved = ordered.removeAt(currentIndex)
+                ordered.add(targetIndex, moved)
+                currentState.copy(
+                    appAssignments = ordered.mapIndexed { index, assignment ->
+                        assignment.copy(launchOrder = index)
+                    }.associateBy(ZoneAppAssignment::zoneId)
+                )
+            }
+        }
+    }
 }
+
+private val assignmentOrderComparator = compareBy<ZoneAppAssignment> { it.launchOrder }
+    .thenBy { it.zoneId }
+
+private fun Map<String, ZoneAppAssignment>.normalizedLaunchOrder():
+    Map<String, ZoneAppAssignment> = values
+    .sortedWith(assignmentOrderComparator)
+    .mapIndexed { index, assignment -> assignment.copy(launchOrder = index) }
+    .associateBy(ZoneAppAssignment::zoneId)

@@ -1,5 +1,6 @@
 package com.trancong.dexworkspacemanager.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -27,5 +28,7 @@ data class WorkspaceAppAssignmentEntity(
     val zoneId: String,
     val packageName: String,
     val activityName: String,
-    val appLabel: String
+    val appLabel: String,
+    @ColumnInfo(defaultValue = "0")
+    val launchOrder: Int
 )

@@ -4,5 +4,6 @@ data class ZoneAppAssignment(
     val zoneId: String,
     val packageName: String,
     val activityName: String,
-    val appLabel: String
+    val appLabel: String,
+    val launchOrder: Int
 )

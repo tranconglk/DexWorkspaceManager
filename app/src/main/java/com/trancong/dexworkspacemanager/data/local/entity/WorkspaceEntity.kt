@@ -1,5 +1,6 @@
 package com.trancong.dexworkspacemanager.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -12,5 +13,7 @@ data class WorkspaceEntity(
     val leftRatio: Float,
     val topRatio: Float,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    @ColumnInfo(defaultValue = "400")
+    val launchDelayMs: Long = 400L
 )

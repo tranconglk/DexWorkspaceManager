@@ -8,7 +8,8 @@ fun WorkspaceAppAssignmentEntity.toDomain(): WorkspaceAppAssignment = WorkspaceA
     zoneId = zoneId,
     packageName = packageName,
     activityName = activityName,
-    appLabel = appLabel
+    appLabel = appLabel,
+    launchOrder = launchOrder
 )
 
 fun WorkspaceAppAssignment.toEntity(workspaceId: Long): WorkspaceAppAssignmentEntity =
@@ -17,19 +18,22 @@ fun WorkspaceAppAssignment.toEntity(workspaceId: Long): WorkspaceAppAssignmentEn
         zoneId = zoneId,
         packageName = packageName,
         activityName = activityName,
-        appLabel = appLabel
+        appLabel = appLabel,
+        launchOrder = launchOrder
     )
 
 fun ZoneAppAssignment.toDomain(): WorkspaceAppAssignment = WorkspaceAppAssignment(
     zoneId = zoneId,
     packageName = packageName,
     activityName = activityName,
-    appLabel = appLabel
+    appLabel = appLabel,
+    launchOrder = launchOrder
 )
 
 fun WorkspaceAppAssignment.toEditorAssignment(): ZoneAppAssignment = ZoneAppAssignment(
     zoneId = zoneId,
     packageName = packageName,
     activityName = activityName,
-    appLabel = appLabel
+    appLabel = appLabel,
+    launchOrder = launchOrder
 )

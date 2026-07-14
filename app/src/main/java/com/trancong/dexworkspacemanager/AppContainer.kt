@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.trancong.dexworkspacemanager.data.local.database.AppDatabase
 import com.trancong.dexworkspacemanager.data.local.database.MIGRATION_1_2
+import com.trancong.dexworkspacemanager.data.local.database.MIGRATION_2_3
 import com.trancong.dexworkspacemanager.data.repository.WorkspaceRepositoryImpl
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AndroidAppLauncher
@@ -28,7 +29,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         context.applicationContext,
         AppDatabase::class.java,
         "dex_workspace_manager.db"
-    ).addMigrations(MIGRATION_1_2).build()
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
     override val workspaceRepository: WorkspaceRepository =
         WorkspaceRepositoryImpl(appDatabase)
