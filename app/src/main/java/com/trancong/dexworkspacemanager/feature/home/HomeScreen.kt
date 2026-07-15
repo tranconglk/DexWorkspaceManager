@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -77,7 +78,10 @@ fun HomeRoute(
     val context = LocalContext.current
     val application = context.applicationContext as DexWorkspaceManagerApplication
     val factory = remember(application) {
-        HomeViewModelFactory(application.container.workspaceRepository)
+        HomeViewModelFactory(
+            application.container.workspaceRepository,
+            application.container.appPreferencesRepository
+        )
     }
     val viewModel: HomeViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
@@ -109,6 +113,7 @@ fun HomeRoute(
         onEditWorkspace = onEditWorkspace,
         onToggleFavorite = viewModel::toggleFavorite,
         onSelectQuickLaunch = viewModel::selectQuickLaunchWorkspace,
+        onDismissDexPinHint = viewModel::dismissDexPinHint,
         onRenameWorkspace = viewModel::requestRename,
         onDuplicateWorkspace = viewModel::requestDuplicate,
         onConfirmRename = viewModel::confirmRename,
@@ -163,6 +168,7 @@ fun HomeScreen(
     onLaunchWorkspace: (Workspace) -> Unit,
     onToggleFavorite: (Workspace) -> Unit,
     onSelectQuickLaunch: (Long) -> Unit,
+    onDismissDexPinHint: () -> Unit,
     onRenameWorkspace: (Workspace) -> Unit,
     onDuplicateWorkspace: (Workspace) -> Unit,
     onConfirmRename: (String) -> Unit,
@@ -206,6 +212,9 @@ fun HomeScreen(
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (uiState.showDexPinHint) {
+                    item { DexPinHint(onDismissDexPinHint) }
+                }
                 when {
                     uiState.isLoading -> item {
                         Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) {
@@ -305,6 +314,25 @@ fun HomeScreen(
                         Text("Xem tất cả workspace")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DexPinHint(onDismiss: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Để mở nhanh trên DeX, kéo biểu tượng DeX Workspace Manager " +
+                    "ra desktop hoặc taskbar DeX.",
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "Ẩn hướng dẫn")
             }
         }
     }

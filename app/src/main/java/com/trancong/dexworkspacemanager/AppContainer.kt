@@ -7,6 +7,9 @@ import com.trancong.dexworkspacemanager.data.local.database.MIGRATION_1_2
 import com.trancong.dexworkspacemanager.data.local.database.MIGRATION_2_3
 import com.trancong.dexworkspacemanager.data.local.database.MIGRATION_3_4
 import com.trancong.dexworkspacemanager.data.repository.WorkspaceRepositoryImpl
+import com.trancong.dexworkspacemanager.data.repository.AppPreferencesRepositoryImpl
+import com.trancong.dexworkspacemanager.data.local.preferences.appPreferencesDataStore
+import com.trancong.dexworkspacemanager.domain.repository.AppPreferencesRepository
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AndroidAppLauncher
 import com.trancong.dexworkspacemanager.platform.applauncher.AndroidForegroundAppLauncher
@@ -31,6 +34,7 @@ interface AppContainer {
     val workspaceLaunchCoordinator: WorkspaceLaunchCoordinator
     val workspaceTransferDirectory: WorkspaceTransferDirectory
     val workspaceBackupManager: WorkspaceBackupManager
+    val appPreferencesRepository: AppPreferencesRepository
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -42,6 +46,9 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val workspaceRepository: WorkspaceRepository =
         WorkspaceRepositoryImpl(appDatabase)
+
+    override val appPreferencesRepository: AppPreferencesRepository =
+        AppPreferencesRepositoryImpl(context.applicationContext.appPreferencesDataStore)
 
     override val installedAppsProvider: InstalledAppsProvider =
         AndroidInstalledAppsProvider(context)

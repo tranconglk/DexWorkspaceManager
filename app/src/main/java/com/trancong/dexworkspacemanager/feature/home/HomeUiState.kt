@@ -7,6 +7,7 @@ data class HomeUiState(
     val favoriteWorkspaces: List<Workspace> = emptyList(),
     val recentWorkspaces: List<Workspace> = emptyList(),
     val quickLaunchWorkspace: Workspace? = null,
+    val showDexPinHint: Boolean = true,
     val isLoading: Boolean = true,
     val launchProgress: WorkspaceLaunchProgress = WorkspaceLaunchProgress(0, 0),
     val launchingWorkspaceId: Long? = null,

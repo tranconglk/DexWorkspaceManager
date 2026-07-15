@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
+import com.trancong.dexworkspacemanager.domain.repository.AppPreferencesRepository
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchFailure
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
@@ -12,10 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class HomeViewModel(
-    private val workspaceRepository: WorkspaceRepository
+    private val workspaceRepository: WorkspaceRepository,
+    private val appPreferencesRepository: AppPreferencesRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -23,28 +26,43 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             try {
-                workspaceRepository.observeAll().collect { workspaces ->
+                combine(
+                    workspaceRepository.observeAll(),
+                    appPreferencesRepository.quickLaunchWorkspaceId,
+                    appPreferencesRepository.showDexPinHint
+                ) { workspaces, quickLaunchId, showDexPinHint ->
+                    Triple(workspaces, quickLaunchId, showDexPinHint)
+                }.collect { (workspaces, savedQuickLaunchId, showDexPinHint) ->
                     _uiState.update { currentState ->
-                        val favorites = workspaces
+                        val allFavorites = workspaces
                             .filter(Workspace::isFavorite)
                             .sortedByDescending(Workspace::updatedAt)
-                            .take(HOME_WORKSPACE_LIMIT)
-                        val favoriteIds = workspaces
-                            .filter(Workspace::isFavorite)
-                            .mapTo(mutableSetOf(), Workspace::id)
+                        val favorites = allFavorites.take(HOME_WORKSPACE_LIMIT)
+                        val favoriteIds = allFavorites.mapTo(mutableSetOf(), Workspace::id)
                         val recent = workspaces
                             .filterNot { it.id in favoriteIds }
                             .sortedByDescending(Workspace::updatedAt)
                             .take(HOME_WORKSPACE_LIMIT)
-                        val selectedQuickLaunchId = currentState.quickLaunchWorkspace?.id
+                        val quickLaunchWorkspace = allFavorites.firstOrNull {
+                            it.id == savedQuickLaunchId
+                        } ?: allFavorites.firstOrNull()
                         currentState.copy(
                             favoriteWorkspaces = favorites,
                             recentWorkspaces = recent,
-                            quickLaunchWorkspace = favorites.firstOrNull {
-                                it.id == selectedQuickLaunchId
-                            } ?: favorites.firstOrNull(),
+                            quickLaunchWorkspace = quickLaunchWorkspace,
+                            showDexPinHint = showDexPinHint,
                             isLoading = false
                         )
+                    }
+                    val validQuickLaunchId = workspaces
+                        .filter(Workspace::isFavorite)
+                        .sortedByDescending(Workspace::updatedAt)
+                        .firstOrNull { it.id == savedQuickLaunchId }
+                        ?.id
+                        ?: workspaces.filter(Workspace::isFavorite)
+                            .maxByOrNull(Workspace::updatedAt)?.id
+                    if (validQuickLaunchId != savedQuickLaunchId) {
+                        appPreferencesRepository.setQuickLaunchWorkspaceId(validQuickLaunchId)
                     }
                 }
             } catch (exception: CancellationException) {
@@ -198,9 +216,16 @@ class HomeViewModel(
     }
 
     fun selectQuickLaunchWorkspace(workspaceId: Long) {
-        val selected = _uiState.value.favoriteWorkspaces.firstOrNull { it.id == workspaceId }
-            ?: return
-        _uiState.update { it.copy(quickLaunchWorkspace = selected) }
+        if (_uiState.value.favoriteWorkspaces.none { it.id == workspaceId }) return
+        viewModelScope.launch {
+            appPreferencesRepository.setQuickLaunchWorkspaceId(workspaceId)
+        }
+    }
+
+    fun dismissDexPinHint() {
+        viewModelScope.launch {
+            appPreferencesRepository.setShowDexPinHint(false)
+        }
     }
 
     fun consumeOperationMessage() = consumeMessage()

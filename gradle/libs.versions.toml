@@ -10,6 +10,7 @@ navigationCompose = "2.9.8"
 kotlin = "2.2.10"
 composeBom = "2026.06.01"
 room = "2.8.4"
+datastore = "1.2.1"
 ksp = "2.3.6"
 
 [libraries]
@@ -33,6 +34,7 @@ androidx-compose-material-icons-core = { group = "androidx.compose.material", na
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
