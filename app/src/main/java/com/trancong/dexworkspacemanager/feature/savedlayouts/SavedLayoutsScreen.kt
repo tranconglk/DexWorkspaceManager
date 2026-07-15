@@ -66,11 +66,15 @@ import java.util.Date
 @Composable
 fun SavedLayoutsRoute(
     onBackClick: () -> Unit,
+    onImportWorkspace: () -> Unit,
     onWorkspaceClick: (Workspace) -> Unit = {}
 ) {
     val application = LocalContext.current.applicationContext as DexWorkspaceManagerApplication
     val viewModelFactory = remember(application) {
-        SavedLayoutsViewModelFactory(application.container.workspaceRepository)
+        SavedLayoutsViewModelFactory(
+            application.container.workspaceRepository,
+            application.container.workspaceTransferDirectory
+        )
     }
     val viewModel: SavedLayoutsViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsState()
@@ -125,6 +129,8 @@ fun SavedLayoutsRoute(
         onCancelRename = viewModel::cancelRename,
         onConfirmDuplicate = viewModel::confirmDuplicate,
         onCancelDuplicate = viewModel::cancelDuplicate,
+        onExportWorkspace = viewModel::exportWorkspace,
+        onImportWorkspace = onImportWorkspace,
         onLaunchWorkspace = { workspace ->
             if (launchJob?.isActive != true) {
                 val activity = hostActivity
@@ -179,6 +185,8 @@ fun SavedLayoutsScreen(
     onCancelRename: () -> Unit,
     onConfirmDuplicate: (String) -> Unit,
     onCancelDuplicate: () -> Unit,
+    onExportWorkspace: (Workspace) -> Unit,
+    onImportWorkspace: () -> Unit,
     onLaunchWorkspace: (Workspace) -> Unit,
     onCancelWorkspaceLaunch: () -> Unit,
     snackbarHostState: SnackbarHostState,
@@ -259,6 +267,11 @@ fun SavedLayoutsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item {
+                    TextButton(onClick = onImportWorkspace, modifier = Modifier.fillMaxWidth()) {
+                        Text("Import workspace")
+                    }
+                }
                 items(
                     items = uiState.workspaces,
                     key = { workspace -> workspace.id }
@@ -272,6 +285,7 @@ fun SavedLayoutsScreen(
                         onToggleFavorite = { onToggleFavorite(workspace) },
                         onRename = { onRenameWorkspace(workspace) },
                         onDuplicate = { onDuplicateWorkspace(workspace) },
+                        onExport = { onExportWorkspace(workspace) },
                         onLaunchClick = { onLaunchWorkspace(workspace) },
                         onCancelLaunch = onCancelWorkspaceLaunch
                     )
@@ -318,6 +332,7 @@ private fun WorkspaceCard(
     onToggleFavorite: () -> Unit,
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
+    onExport: () -> Unit,
     onLaunchClick: () -> Unit,
     onCancelLaunch: () -> Unit
 ) {
@@ -416,6 +431,10 @@ private fun WorkspaceCard(
                     DropdownMenuItem(
                         text = { Text("Sao chép") },
                         onClick = { menuExpanded = false; onDuplicate() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Export JSON") },
+                        onClick = { menuExpanded = false; onExport() }
                     )
                     DropdownMenuItem(
                         text = { Text("Xóa") },

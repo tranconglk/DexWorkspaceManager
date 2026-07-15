@@ -6,6 +6,7 @@ enum class AppRoute(val route: String) {
     Home("home"),
     LayoutEditor("layout_editor?workspaceId={workspaceId}"),
     SavedLayouts("saved_layouts"),
+    WorkspaceTransfer("workspace_transfer"),
     AppPicker("app_picker/{zoneId}");
 
     companion object {

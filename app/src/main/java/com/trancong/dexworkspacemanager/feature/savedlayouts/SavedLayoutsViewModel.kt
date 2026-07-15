@@ -7,6 +7,8 @@ import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchFailure
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +17,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SavedLayoutsViewModel(
-    private val workspaceRepository: WorkspaceRepository
+    private val workspaceRepository: WorkspaceRepository,
+    private val workspaceTransferDirectory: WorkspaceTransferDirectory
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SavedLayoutsUiState())
     val uiState: StateFlow<SavedLayoutsUiState> = _uiState.asStateFlow()
@@ -118,6 +121,20 @@ class SavedLayoutsViewModel(
                 successMessage = null,
                 errorMessage = "Không thể cập nhật yêu thích. Vui lòng thử lại"
             ) { it }
+        }
+    }
+
+    fun exportWorkspace(workspace: Workspace) {
+        viewModelScope.launch {
+            when (val result = workspaceTransferDirectory.export(workspace)) {
+                is WorkspaceTransferResult.Success -> _uiState.update {
+                    it.copy(message = "Đã export ${result.fileName}", error = null)
+                }
+                is WorkspaceTransferResult.FileError -> _uiState.update {
+                    it.copy(error = result.message ?: "Không thể export workspace")
+                }
+                else -> _uiState.update { it.copy(error = "Không thể export workspace") }
+            }
         }
     }
 

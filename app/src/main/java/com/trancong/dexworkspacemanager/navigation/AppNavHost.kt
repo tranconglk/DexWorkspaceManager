@@ -10,6 +10,7 @@ import com.trancong.dexworkspacemanager.feature.apppicker.AppPickerRoute
 import com.trancong.dexworkspacemanager.feature.home.HomeRoute
 import com.trancong.dexworkspacemanager.feature.layouteditor.LayoutEditorRoute
 import com.trancong.dexworkspacemanager.feature.savedlayouts.SavedLayoutsRoute
+import com.trancong.dexworkspacemanager.feature.workspacetransfer.WorkspaceTransferRoute
 
 @Composable
 fun AppNavHost() {
@@ -74,10 +75,14 @@ fun AppNavHost() {
         composable(AppRoute.SavedLayouts.route) {
             SavedLayoutsRoute(
                 onBackClick = navController::popBackStack,
+                onImportWorkspace = { navController.navigate(AppRoute.WorkspaceTransfer.route) },
                 onWorkspaceClick = { workspace ->
                     navController.navigate(AppRoute.layoutEditor(workspace.id))
                 }
             )
+        }
+        composable(AppRoute.WorkspaceTransfer.route) {
+            WorkspaceTransferRoute(onBackClick = navController::popBackStack)
         }
     }
 }
