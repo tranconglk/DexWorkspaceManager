@@ -73,6 +73,70 @@ class SavedLayoutsViewModel(
         }
     }
 
+    fun requestRename(workspace: Workspace) {
+        _uiState.update { it.copy(workspacePendingRename = workspace) }
+    }
+
+    fun cancelRename() {
+        _uiState.update { it.copy(workspacePendingRename = null) }
+    }
+
+    fun confirmRename(newName: String) {
+        val workspace = _uiState.value.workspacePendingRename ?: return
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.rename(workspace.id, newName) },
+                successMessage = "Đã đổi tên workspace",
+                errorMessage = "Không thể đổi tên workspace. Vui lòng thử lại"
+            ) { it.copy(workspacePendingRename = null) }
+        }
+    }
+
+    fun requestDuplicate(workspace: Workspace) {
+        _uiState.update { it.copy(workspacePendingDuplicate = workspace) }
+    }
+
+    fun cancelDuplicate() {
+        _uiState.update { it.copy(workspacePendingDuplicate = null) }
+    }
+
+    fun confirmDuplicate(newName: String) {
+        val workspace = _uiState.value.workspacePendingDuplicate ?: return
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.duplicate(workspace.id, newName) },
+                successMessage = "Đã sao chép workspace",
+                errorMessage = "Không thể sao chép workspace. Vui lòng thử lại"
+            ) { it.copy(workspacePendingDuplicate = null) }
+        }
+    }
+
+    fun toggleFavorite(workspace: Workspace) {
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.setFavorite(workspace.id, !workspace.isFavorite) },
+                successMessage = null,
+                errorMessage = "Không thể cập nhật yêu thích. Vui lòng thử lại"
+            ) { it }
+        }
+    }
+
+    private suspend fun <T> runWorkspaceOperation(
+        operation: suspend () -> T,
+        successMessage: String?,
+        errorMessage: String,
+        onSuccess: (SavedLayoutsUiState) -> SavedLayoutsUiState
+    ) {
+        try {
+            operation()
+            _uiState.update { onSuccess(it).copy(message = successMessage, error = null) }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            _uiState.update { it.copy(error = errorMessage) }
+        }
+    }
+
     fun startWorkspaceLaunch(workspaceId: Long, totalApps: Int) {
         if (_uiState.value.launchingWorkspaceId != null) return
         _uiState.update {
@@ -180,7 +244,10 @@ class SavedLayoutsViewModel(
                 workspaceRepository.observeAll().collect { workspaces ->
                     _uiState.update { currentState ->
                         currentState.copy(
-                            workspaces = workspaces,
+                            workspaces = workspaces.sortedWith(
+                                compareByDescending<Workspace> { it.isFavorite }
+                                    .thenByDescending { it.updatedAt }
+                            ),
                             isLoading = false
                         )
                     }

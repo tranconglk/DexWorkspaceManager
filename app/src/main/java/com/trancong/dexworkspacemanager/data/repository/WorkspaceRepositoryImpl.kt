@@ -37,4 +37,35 @@ class WorkspaceRepositoryImpl(
     override suspend fun deleteById(id: Long) {
         workspaceDao.deleteById(id)
     }
+
+    override suspend fun rename(workspaceId: Long, newName: String) {
+        val trimmedName = newName.trim()
+        require(trimmedName.isNotEmpty()) { "Workspace name must not be blank." }
+        check(workspaceDao.rename(workspaceId, trimmedName, System.currentTimeMillis()) > 0) {
+            "Workspace $workspaceId was not found."
+        }
+    }
+
+    override suspend fun setFavorite(workspaceId: Long, isFavorite: Boolean) {
+        check(workspaceDao.setFavorite(workspaceId, isFavorite) > 0) {
+            "Workspace $workspaceId was not found."
+        }
+    }
+
+    override suspend fun duplicate(workspaceId: Long, newName: String): Long {
+        val trimmedName = newName.trim()
+        require(trimmedName.isNotEmpty()) { "Workspace name must not be blank." }
+        val source = getById(workspaceId)
+            ?: error("Workspace $workspaceId was not found.")
+        val now = System.currentTimeMillis()
+        return save(
+            source.copy(
+                id = 0,
+                name = trimmedName,
+                createdAt = now,
+                updatedAt = now,
+                isFavorite = false
+            )
+        )
+    }
 }

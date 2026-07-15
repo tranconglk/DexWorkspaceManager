@@ -14,7 +14,8 @@ fun WorkspaceEntity.toDomain(): Workspace = Workspace(
     topRatio = topRatio,
     createdAt = createdAt,
     updatedAt = updatedAt,
-    launchDelayMs = launchDelayMs
+    launchDelayMs = launchDelayMs,
+    isFavorite = isFavorite
 )
 
 fun WorkspaceWithAssignments.toDomain(): Workspace = workspace.toDomain().copy(
@@ -29,5 +30,6 @@ fun Workspace.toEntity(): WorkspaceEntity = WorkspaceEntity(
     topRatio = topRatio,
     createdAt = createdAt,
     updatedAt = updatedAt,
-    launchDelayMs = launchDelayMs
+    launchDelayMs = launchDelayMs,
+    isFavorite = isFavorite
 )

@@ -7,6 +7,8 @@ data class SavedLayoutsUiState(
     val workspaces: List<Workspace> = emptyList(),
     val isLoading: Boolean = true,
     val workspacePendingDelete: Workspace? = null,
+    val workspacePendingRename: Workspace? = null,
+    val workspacePendingDuplicate: Workspace? = null,
     val message: String? = null,
     val error: String? = null,
     val launchingWorkspaceId: Long? = null,

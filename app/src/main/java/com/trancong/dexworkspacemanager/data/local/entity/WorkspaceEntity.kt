@@ -15,5 +15,7 @@ data class WorkspaceEntity(
     val createdAt: Long,
     val updatedAt: Long,
     @ColumnInfo(defaultValue = "400")
-    val launchDelayMs: Long = 400L
+    val launchDelayMs: Long = 400L,
+    @ColumnInfo(defaultValue = "0")
+    val isFavorite: Boolean = false
 )

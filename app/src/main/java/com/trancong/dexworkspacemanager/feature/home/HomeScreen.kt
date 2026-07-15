@@ -18,19 +18,28 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,6 +107,13 @@ fun HomeRoute(
         onCreateWorkspace = onCreateWorkspace,
         onViewAllWorkspaces = onViewAllWorkspaces,
         onEditWorkspace = onEditWorkspace,
+        onToggleFavorite = viewModel::toggleFavorite,
+        onRenameWorkspace = viewModel::requestRename,
+        onDuplicateWorkspace = viewModel::requestDuplicate,
+        onConfirmRename = viewModel::confirmRename,
+        onCancelRename = viewModel::cancelRename,
+        onConfirmDuplicate = viewModel::confirmDuplicate,
+        onCancelDuplicate = viewModel::cancelDuplicate,
         onLaunchWorkspace = { workspace ->
             if (launchJob?.isActive != true) {
                 val workArea = activity?.currentExternalDisplayWorkArea()
@@ -139,9 +156,36 @@ fun HomeScreen(
     onViewAllWorkspaces: () -> Unit,
     onEditWorkspace: (Long) -> Unit,
     onLaunchWorkspace: (Workspace) -> Unit,
+    onToggleFavorite: (Workspace) -> Unit,
+    onRenameWorkspace: (Workspace) -> Unit,
+    onDuplicateWorkspace: (Workspace) -> Unit,
+    onConfirmRename: (String) -> Unit,
+    onCancelRename: () -> Unit,
+    onConfirmDuplicate: (String) -> Unit,
+    onCancelDuplicate: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
+    uiState.workspacePendingRename?.let { workspace ->
+        WorkspaceNameDialog(
+            workspace = workspace,
+            title = "Đổi tên workspace",
+            confirmLabel = "Lưu",
+            initialName = workspace.name,
+            onConfirm = onConfirmRename,
+            onCancel = onCancelRename
+        )
+    }
+    uiState.workspacePendingDuplicate?.let { workspace ->
+        WorkspaceNameDialog(
+            workspace = workspace,
+            title = "Sao chép workspace",
+            confirmLabel = "Sao chép",
+            initialName = "${workspace.name} - Bản sao",
+            onConfirm = onConfirmDuplicate,
+            onCancel = onCancelDuplicate
+        )
+    }
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text("DeX Workspace Manager") }) },
@@ -184,6 +228,9 @@ fun HomeScreen(
                                     launchProgress = uiState.launchProgress,
                                     onEdit = { onEditWorkspace(workspace.id) },
                                     onLaunch = { onLaunchWorkspace(workspace) },
+                                    onToggleFavorite = { onToggleFavorite(workspace) },
+                                    onRename = { onRenameWorkspace(workspace) },
+                                    onDuplicate = { onDuplicateWorkspace(workspace) },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -233,20 +280,59 @@ private fun WorkspaceProfileCard(
     launchProgress: WorkspaceLaunchProgress,
     onEdit: () -> Unit,
     onLaunch: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRename: () -> Unit,
+    onDuplicate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Card(modifier = modifier.clickable(onClick = onEdit)) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                workspace.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    workspace.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (workspace.isFavorite) {
+                            Icons.Default.Favorite
+                        } else {
+                            Icons.Default.FavoriteBorder
+                        },
+                        contentDescription = if (workspace.isFavorite) {
+                            "Bỏ yêu thích ${workspace.name}"
+                        } else {
+                            "Đánh dấu yêu thích ${workspace.name}"
+                        }
+                    )
+                }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Thao tác ${workspace.name}")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Đổi tên") },
+                            onClick = { menuExpanded = false; onRename() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Sao chép") },
+                            onClick = { menuExpanded = false; onDuplicate() }
+                        )
+                    }
+                }
+            }
             val assignments = workspace.appAssignments.sortedBy { it.launchOrder }
             assignments.take(3).forEach { assignment ->
                 Text("• ${assignment.appLabel}", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -280,6 +366,36 @@ private fun WorkspaceProfileCard(
             }
         }
     }
+}
+
+@Composable
+private fun WorkspaceNameDialog(
+    workspace: Workspace,
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    onConfirm: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var name by rememberSaveable(workspace.id, title) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Tên workspace") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Hủy") } }
+    )
 }
 
 private fun Workspace.zoneCount(): Int = when (template) {

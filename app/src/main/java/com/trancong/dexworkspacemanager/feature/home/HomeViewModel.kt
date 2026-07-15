@@ -2,6 +2,7 @@ package com.trancong.dexworkspacemanager.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchFailure
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
@@ -25,9 +26,8 @@ class HomeViewModel(
                 workspaceRepository.observeAll().collect { workspaces ->
                     _uiState.update {
                         it.copy(
-                            workspaces = workspaces.sortedByDescending { workspace ->
-                                workspace.updatedAt
-                            }.take(RECENT_WORKSPACE_LIMIT),
+                            workspaces = workspaces.sortedForProfiles()
+                                .take(RECENT_WORKSPACE_LIMIT),
                             isLoading = false
                         )
                     }
@@ -134,6 +134,76 @@ class HomeViewModel(
 
     fun consumeError() = _uiState.update { it.copy(error = null) }
 
+    fun requestRename(workspace: Workspace) {
+        _uiState.update { it.copy(workspacePendingRename = workspace) }
+    }
+
+    fun cancelRename() {
+        _uiState.update { it.copy(workspacePendingRename = null) }
+    }
+
+    fun confirmRename(newName: String) {
+        val workspace = _uiState.value.workspacePendingRename ?: return
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.rename(workspace.id, newName) },
+                successMessage = "Đã đổi tên workspace",
+                errorMessage = "Không thể đổi tên workspace. Vui lòng thử lại"
+            ) { it.copy(workspacePendingRename = null) }
+        }
+    }
+
+    fun requestDuplicate(workspace: Workspace) {
+        _uiState.update { it.copy(workspacePendingDuplicate = workspace) }
+    }
+
+    fun cancelDuplicate() {
+        _uiState.update { it.copy(workspacePendingDuplicate = null) }
+    }
+
+    fun confirmDuplicate(newName: String) {
+        val workspace = _uiState.value.workspacePendingDuplicate ?: return
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.duplicate(workspace.id, newName) },
+                successMessage = "Đã sao chép workspace",
+                errorMessage = "Không thể sao chép workspace. Vui lòng thử lại"
+            ) { it.copy(workspacePendingDuplicate = null) }
+        }
+    }
+
+    fun toggleFavorite(workspace: Workspace) {
+        viewModelScope.launch {
+            runWorkspaceOperation(
+                operation = { workspaceRepository.setFavorite(workspace.id, !workspace.isFavorite) },
+                successMessage = null,
+                errorMessage = "Không thể cập nhật yêu thích. Vui lòng thử lại"
+            ) { it }
+        }
+    }
+
+    fun consumeOperationMessage() = consumeMessage()
+
+    fun consumeOperationError() = consumeError()
+
+    private suspend fun <T> runWorkspaceOperation(
+        operation: suspend () -> T,
+        successMessage: String?,
+        errorMessage: String,
+        onSuccess: (HomeUiState) -> HomeUiState
+    ) {
+        try {
+            operation()
+            _uiState.update {
+                onSuccess(it).copy(message = successMessage, error = null)
+            }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            _uiState.update { it.copy(error = errorMessage) }
+        }
+    }
+
     private fun List<WorkspaceLaunchFailure>.failedAppSummary(): String =
         map(WorkspaceLaunchFailure::appLabel).distinct().take(3).joinToString()
 
@@ -141,3 +211,8 @@ class HomeViewModel(
         const val RECENT_WORKSPACE_LIMIT = 4
     }
 }
+
+private fun List<Workspace>.sortedForProfiles(): List<Workspace> = sortedWith(
+    compareByDescending<Workspace> { it.isFavorite }
+        .thenByDescending { it.updatedAt }
+)

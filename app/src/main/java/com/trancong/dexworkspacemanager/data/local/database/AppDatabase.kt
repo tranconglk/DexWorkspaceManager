@@ -9,7 +9,7 @@ import com.trancong.dexworkspacemanager.data.local.entity.WorkspaceEntity
 
 @Database(
     entities = [WorkspaceEntity::class, WorkspaceAppAssignmentEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -24,4 +24,10 @@ interface WorkspaceDao {
 
     @Query("DELETE FROM workspaces WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("UPDATE workspaces SET name = :name, updatedAt = :updatedAt WHERE id = :workspaceId")
+    suspend fun rename(workspaceId: Long, name: String, updatedAt: Long): Int
+
+    @Query("UPDATE workspaces SET isFavorite = :isFavorite WHERE id = :workspaceId")
+    suspend fun setFavorite(workspaceId: Long, isFavorite: Boolean): Int
 }

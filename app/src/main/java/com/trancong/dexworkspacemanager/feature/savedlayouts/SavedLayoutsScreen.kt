@@ -17,14 +17,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -111,6 +118,13 @@ fun SavedLayoutsRoute(
         onDeleteClick = viewModel::requestDelete,
         onConfirmDelete = viewModel::confirmDelete,
         onCancelDelete = viewModel::cancelDelete,
+        onToggleFavorite = viewModel::toggleFavorite,
+        onRenameWorkspace = viewModel::requestRename,
+        onDuplicateWorkspace = viewModel::requestDuplicate,
+        onConfirmRename = viewModel::confirmRename,
+        onCancelRename = viewModel::cancelRename,
+        onConfirmDuplicate = viewModel::confirmDuplicate,
+        onCancelDuplicate = viewModel::cancelDuplicate,
         onLaunchWorkspace = { workspace ->
             if (launchJob?.isActive != true) {
                 val activity = hostActivity
@@ -158,6 +172,13 @@ fun SavedLayoutsScreen(
     onDeleteClick: (Workspace) -> Unit,
     onConfirmDelete: () -> Unit,
     onCancelDelete: () -> Unit,
+    onToggleFavorite: (Workspace) -> Unit,
+    onRenameWorkspace: (Workspace) -> Unit,
+    onDuplicateWorkspace: (Workspace) -> Unit,
+    onConfirmRename: (String) -> Unit,
+    onCancelRename: () -> Unit,
+    onConfirmDuplicate: (String) -> Unit,
+    onCancelDuplicate: () -> Unit,
     onLaunchWorkspace: (Workspace) -> Unit,
     onCancelWorkspaceLaunch: () -> Unit,
     snackbarHostState: SnackbarHostState,
@@ -178,6 +199,26 @@ fun SavedLayoutsScreen(
                     Text(text = "Hủy")
                 }
             }
+        )
+    }
+    uiState.workspacePendingRename?.let { workspace ->
+        WorkspaceNameDialog(
+            workspace = workspace,
+            title = "Đổi tên workspace",
+            confirmLabel = "Lưu",
+            initialName = workspace.name,
+            onConfirm = onConfirmRename,
+            onCancel = onCancelRename
+        )
+    }
+    uiState.workspacePendingDuplicate?.let { workspace ->
+        WorkspaceNameDialog(
+            workspace = workspace,
+            title = "Sao chép workspace",
+            confirmLabel = "Sao chép",
+            initialName = "${workspace.name} - Bản sao",
+            onConfirm = onConfirmDuplicate,
+            onCancel = onCancelDuplicate
         )
     }
 
@@ -228,6 +269,9 @@ fun SavedLayoutsScreen(
                         launchProgress = uiState.launchProgress,
                         onClick = { onWorkspaceClick(workspace) },
                         onDeleteClick = { onDeleteClick(workspace) },
+                        onToggleFavorite = { onToggleFavorite(workspace) },
+                        onRename = { onRenameWorkspace(workspace) },
+                        onDuplicate = { onDuplicateWorkspace(workspace) },
                         onLaunchClick = { onLaunchWorkspace(workspace) },
                         onCancelLaunch = onCancelWorkspaceLaunch
                     )
@@ -271,9 +315,13 @@ private fun WorkspaceCard(
     launchProgress: com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onRename: () -> Unit,
+    onDuplicate: () -> Unit,
     onLaunchClick: () -> Unit,
     onCancelLaunch: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     val isLaunching = launchingWorkspaceId == workspace.id
     val anotherWorkspaceIsLaunching = launchingWorkspaceId != null && !isLaunching
     Card(
@@ -336,14 +384,78 @@ private fun WorkspaceCard(
                     }
                 }
             }
-            IconButton(onClick = onDeleteClick, enabled = !isLaunching) {
+            IconButton(onClick = onToggleFavorite, enabled = !isLaunching) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Xóa ${workspace.name}"
+                    imageVector = if (workspace.isFavorite) {
+                        Icons.Default.Favorite
+                    } else {
+                        Icons.Default.FavoriteBorder
+                    },
+                    contentDescription = if (workspace.isFavorite) {
+                        "Bỏ yêu thích ${workspace.name}"
+                    } else {
+                        "Đánh dấu yêu thích ${workspace.name}"
+                    }
                 )
+            }
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    enabled = !isLaunching
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Thao tác ${workspace.name}")
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Đổi tên") },
+                        onClick = { menuExpanded = false; onRename() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sao chép") },
+                        onClick = { menuExpanded = false; onDuplicate() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Xóa") },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        onClick = { menuExpanded = false; onDeleteClick() }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun WorkspaceNameDialog(
+    workspace: Workspace,
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    onConfirm: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var name by rememberSaveable(workspace.id, title) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Tên workspace") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Hủy") } }
+    )
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

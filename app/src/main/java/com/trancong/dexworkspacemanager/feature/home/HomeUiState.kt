@@ -8,6 +8,8 @@ data class HomeUiState(
     val isLoading: Boolean = true,
     val launchProgress: WorkspaceLaunchProgress = WorkspaceLaunchProgress(0, 0),
     val launchingWorkspaceId: Long? = null,
+    val workspacePendingRename: Workspace? = null,
+    val workspacePendingDuplicate: Workspace? = null,
     val message: String? = null,
     val error: String? = null
 )

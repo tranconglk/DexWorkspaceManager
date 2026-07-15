@@ -11,7 +11,8 @@ data class Workspace(
     val createdAt: Long,
     val updatedAt: Long,
     val appAssignments: List<WorkspaceAppAssignment> = emptyList(),
-    val launchDelayMs: Long = 400L
+    val launchDelayMs: Long = 400L,
+    val isFavorite: Boolean = false
 ) {
     init {
         require(name.isNotBlank()) { "Workspace name must not be blank." }
