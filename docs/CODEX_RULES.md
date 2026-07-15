@@ -23,3 +23,7 @@ Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project De
 19. Không commit GitHub workflow chứa secrets, keystore hoặc mật khẩu.
 20. Mọi thay đổi phải giữ `lintDebug` không có error; không suppress rộng hoặc dùng baseline để che lỗi nghiêm trọng.
 21. Không bỏ qua Gradle Wrapper checksum, Dependency Review hoặc supply-chain checks khi sửa build và CI.
+22. Mọi thay đổi dependency phải cập nhật và review `gradle/verification-metadata.xml`.
+23. Không dùng `--dependency-verification off` hoặc xóa verification metadata để làm CI xanh.
+24. Không tự động sinh verification metadata trong GitHub Actions.
+25. Không nâng dependency khi metadata mới chưa được review.

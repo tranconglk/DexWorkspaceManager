@@ -26,8 +26,12 @@ connected Android device when required.
 - Dependabot checks Gradle and GitHub Actions dependencies monthly, with at most five open pull
   requests per ecosystem. Updates require normal review; no automatic merge or signing secret is
   configured.
-- Dependency verification metadata and dependency locking are deferred to DLM-041 so the full
-  plugin and transitive dependency graph can be reviewed before enforcement is enabled.
+- Gradle automatically enforces `gradle/verification-metadata.xml` in strict mode. A missing or
+  mismatched checksum fails the affected CI job.
+- CI verifies the reviewed metadata but never generates or updates it. Dependency changes,
+  including Dependabot updates, must include a separately reviewed metadata diff.
+- CI builds an unsigned release APK only; it does not sign production APKs and has no signing
+  credentials.
 
 Equivalent local commands on Windows are:
 
