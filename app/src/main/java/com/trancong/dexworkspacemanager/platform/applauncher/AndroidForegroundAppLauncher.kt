@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.graphics.Rect
-import android.util.Log
 
 class AndroidForegroundAppLauncher : ForegroundAppLauncher {
     override fun launchInZone(
@@ -56,10 +55,6 @@ class AndroidForegroundAppLauncher : ForegroundAppLauncher {
             val options = ActivityOptions.makeBasic().apply {
                 launchBounds = Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
             }
-            Log.d(
-                LOG_TAG,
-                "launchInZone packageName=$packageName, activityName=$activityName, bounds=$bounds"
-            )
             activity.startActivity(intent, options.toBundle())
             AppLaunchResult.Success
         } catch (exception: IllegalArgumentException) {
@@ -94,9 +89,5 @@ class AndroidForegroundAppLauncher : ForegroundAppLauncher {
             @Suppress("DEPRECATION")
             packageManager.getActivityInfo(component, 0)
         }
-    }
-
-    private companion object {
-        const val LOG_TAG = "DexLaunch"
     }
 }

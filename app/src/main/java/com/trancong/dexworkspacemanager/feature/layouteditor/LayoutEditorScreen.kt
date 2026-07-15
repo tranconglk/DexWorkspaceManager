@@ -3,7 +3,6 @@ package com.trancong.dexworkspacemanager.feature.layouteditor
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.util.Log
 import android.os.Build
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -205,13 +204,6 @@ fun LayoutEditorRoute(
                                 workArea.usableHeight,
                                 marginPx = with(density) { 8.dp.roundToPx() }
                             )
-                            Log.d(
-                                LAUNCH_LOG_TAG,
-                                "sourceActivityDisplayId=$sourceDisplayId, " +
-                                    "detectedExternalDisplayIds=$detectedExternalDisplayIds, " +
-                                    "workArea=$workArea, " +
-                                    "bounds=$bounds, packageName=${assignment.packageName}"
-                            )
                             lastDiagnosticDetails = diagnosticDetails(
                                 workArea,
                                 bounds,
@@ -303,12 +295,6 @@ fun LayoutEditorRoute(
                                 workArea.width,
                                 workArea.usableHeight,
                                 marginPx = with(density) { 8.dp.roundToPx() }
-                            )
-                            Log.d(
-                                LAUNCH_LOG_TAG,
-                                "diagnostic targetDisplayId=$targetDisplayId, workArea=$workArea, " +
-                                    "bounds=$bounds, packageName=${assignment.packageName}, " +
-                                    "activityName=${assignment.activityName}"
                             )
                             lastDiagnosticDetails = diagnosticDetails(
                                 workArea,
@@ -1210,7 +1196,6 @@ private fun diagnosticDetails(
 ): String = "workArea=$workArea\nbounds=$bounds\n" +
     "package=${assignment.packageName}\nactivity=${assignment.activityName}"
 
-private const val LAUNCH_LOG_TAG = "DexLaunch"
 private const val MAX_DELAY_SLIDER_MS = 2_000L
 private const val DELAY_SLIDER_STEP_MS = 100
 private const val DELAY_SLIDER_STEPS = 19

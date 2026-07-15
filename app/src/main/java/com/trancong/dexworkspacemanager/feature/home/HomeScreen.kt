@@ -73,7 +73,10 @@ fun HomeRoute(
             if (launchJob?.isActive != true) {
                 val workArea = activity?.currentExternalDisplayWorkArea()
                 if (activity == null || !activity.isRunningOnExternalDisplay() || workArea == null) {
-                    Log.w(DEX_ONLY_LOG_TAG, "Workspace launch attempted outside DeX")
+                    Log.w(
+                        DEX_ONLY_LOG_TAG,
+                        "Workspace launch unavailable because the DeX display is not available"
+                    )
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             "Hãy mở DeX Workspace Manager trực tiếp trên màn hình DeX"
