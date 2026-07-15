@@ -18,6 +18,8 @@ Danh sách này mô tả chức năng có trong implementation; mức độ xác
 
 ## Stabilization
 
+- CI unit test/build: implemented, pending verification on GitHub Actions.
+- Instrumentation CI: future; hiện chạy local trên thiết bị Android kết nối.
 - Release build.
 - Dọn log.
 - Test cắm/rút DeX.

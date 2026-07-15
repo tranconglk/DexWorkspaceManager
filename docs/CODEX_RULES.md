@@ -18,3 +18,6 @@ Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project De
 14. UI phải thích ứng theo kích thước cửa sổ, không theo `Build.MODEL`.
 15. Nếu thay đổi Room schema, phải có migration và kiểm thử migration.
 16. Nếu thay đổi launch engine, phải kiểm thử lại trên cả Samsung Note8 + Hades ROM v3 và Samsung S23 Ultra.
+17. Mọi task phải giữ workflow Android CI xanh.
+18. Trước khi commit, chạy unit test và build debug/release tương ứng ở local.
+19. Không commit GitHub workflow chứa secrets, keystore hoặc mật khẩu.
