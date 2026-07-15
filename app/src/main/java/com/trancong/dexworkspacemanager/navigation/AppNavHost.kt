@@ -21,8 +21,8 @@ fun AppNavHost() {
     ) {
         composable(AppRoute.Home.route) {
             HomeRoute(
-                onCreateLayoutClick = { navController.navigate(AppRoute.layoutEditor()) },
-                onSavedLayoutsClick = { navController.navigate(AppRoute.SavedLayouts.route) },
+                onCreateWorkspace = { navController.navigate(AppRoute.layoutEditor()) },
+                onViewAllWorkspaces = { navController.navigate(AppRoute.SavedLayouts.route) },
                 onEditWorkspace = { workspaceId ->
                     navController.navigate(AppRoute.layoutEditor(workspaceId))
                 }
