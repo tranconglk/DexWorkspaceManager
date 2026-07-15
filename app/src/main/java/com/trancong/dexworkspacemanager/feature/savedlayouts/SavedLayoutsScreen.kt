@@ -177,6 +177,7 @@ fun SavedLayoutsRoute(
 @Composable
 fun SavedLayoutsScreen(
     uiState: SavedLayoutsUiState,
+    modifier: Modifier = Modifier,
     onBackClick: () -> Unit,
     onWorkspaceClick: (Workspace) -> Unit = {},
     onDeleteClick: (Workspace) -> Unit,
@@ -194,8 +195,7 @@ fun SavedLayoutsScreen(
     onLaunchWorkspace: (Workspace) -> Unit,
     onCancelWorkspaceLaunch: () -> Unit,
     onRefreshAppAvailability: () -> Unit,
-    snackbarHostState: SnackbarHostState,
-    modifier: Modifier = Modifier
+    snackbarHostState: SnackbarHostState
 ) {
     uiState.workspacePendingDelete?.let { workspace ->
         AlertDialog(

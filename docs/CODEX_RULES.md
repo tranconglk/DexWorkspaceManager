@@ -21,3 +21,4 @@ Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project De
 17. Mọi task phải giữ workflow Android CI xanh.
 18. Trước khi commit, chạy unit test và build debug/release tương ứng ở local.
 19. Không commit GitHub workflow chứa secrets, keystore hoặc mật khẩu.
+20. Mọi thay đổi phải giữ `lintDebug` không có error; không suppress rộng hoặc dùng baseline để che lỗi nghiêm trọng.

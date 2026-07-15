@@ -51,7 +51,7 @@ fun AppPickerRoute(
     val lifecycleAwareState = remember(viewModel, lifecycle) {
         viewModel.uiState.flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
     }
-    val uiState by lifecycleAwareState.collectAsState(initial = viewModel.uiState.value)
+    val uiState by lifecycleAwareState.collectAsState(initial = AppPickerUiState())
 
     AppPickerScreen(
         uiState = uiState,

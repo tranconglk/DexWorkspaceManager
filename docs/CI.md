@@ -4,8 +4,9 @@ Workflow `Android CI` runs for pushes and pull requests targeting `master`, and 
 started manually from the GitHub Actions page.
 
 The `unit-tests` job runs `testDebugUnitTest`. When it finishes, including on failure, its HTML
-and XML reports are uploaded as `unit-test-reports`. The dependent `build` job runs only after
-unit tests pass and builds both debug and release variants.
+and XML reports are uploaded as `unit-test-reports`. The `lint` job runs `lintDebug` and always
+uploads the generated reports as `android-lint-reports`. The dependent `build` job runs only
+after both unit tests and lint pass, then builds the debug and release variants.
 
 Build artifacts are retained for seven days:
 
@@ -20,6 +21,7 @@ Equivalent local commands on Windows are:
 
 ```powershell
 .\gradlew testDebugUnitTest
+.\gradlew lintDebug
 .\gradlew assembleDebug
 .\gradlew assembleRelease
 .\gradlew connectedDebugAndroidTest # Requires a connected device.
