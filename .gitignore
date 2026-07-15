@@ -12,6 +12,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab
 .vscode/
 gradle/wrapper/dists/
 
