@@ -25,6 +25,9 @@ interface WorkspaceDao {
     @Query("DELETE FROM workspaces WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM workspaces")
+    suspend fun deleteAll()
+
     @Query("UPDATE workspaces SET name = :name, updatedAt = :updatedAt WHERE id = :workspaceId")
     suspend fun rename(workspaceId: Long, name: String, updatedAt: Long): Int
 

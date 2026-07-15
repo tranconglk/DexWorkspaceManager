@@ -17,4 +17,8 @@ interface WorkspaceRepository {
     suspend fun setFavorite(workspaceId: Long, isFavorite: Boolean)
 
     suspend fun duplicate(workspaceId: Long, newName: String): Long
+
+    suspend fun mergeAll(workspaces: List<Workspace>): Int
+
+    suspend fun replaceAll(workspaces: List<Workspace>): Int
 }

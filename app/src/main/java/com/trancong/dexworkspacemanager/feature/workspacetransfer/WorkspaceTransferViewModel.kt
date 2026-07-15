@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferResult
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceBackupManager
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceBackupResult
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceRestoreMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +17,8 @@ import kotlinx.coroutines.launch
 
 class WorkspaceTransferViewModel(
     private val repository: WorkspaceRepository,
-    private val transferDirectory: WorkspaceTransferDirectory
+    private val transferDirectory: WorkspaceTransferDirectory,
+    private val backupManager: WorkspaceBackupManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WorkspaceTransferUiState())
     val uiState: StateFlow<WorkspaceTransferUiState> = _uiState.asStateFlow()
@@ -26,7 +30,10 @@ class WorkspaceTransferViewModel(
             try {
                 _uiState.update { it.copy(isLoading = true, error = null) }
                 val files = transferDirectory.listImportFiles()
-                _uiState.update { it.copy(importFiles = files, isLoading = false) }
+                val backupFiles = backupManager.listBackupFiles()
+                _uiState.update {
+                    it.copy(importFiles = files, backupFiles = backupFiles, isLoading = false)
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (_: Exception) {
@@ -77,10 +84,79 @@ class WorkspaceTransferViewModel(
         _uiState.update { it.copy(selectedFileName = null, previewWorkspace = null) }
     }
 
+    fun createBackup() {
+        if (_uiState.value.isCreatingBackup || _uiState.value.isRestoring) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingBackup = true, error = null) }
+            when (val result = backupManager.createBackup()) {
+                is WorkspaceBackupResult.BackupSuccess -> _uiState.update {
+                    it.copy(
+                        isCreatingBackup = false,
+                        message = "Đã backup ${result.workspaceCount} workspace: ${result.fileName}"
+                    )
+                }
+                else -> _uiState.update {
+                    it.copy(isCreatingBackup = false, error = result.errorMessage())
+                }
+            }
+        }
+    }
+
+    fun selectBackup(fileName: String) {
+        viewModelScope.launch {
+            backupManager.previewBackup(fileName).fold(
+                onSuccess = { preview ->
+                    _uiState.update { it.copy(selectedBackupPreview = preview, error = null) }
+                },
+                onFailure = { exception ->
+                    reportError(exception.message ?: "Backup không hợp lệ")
+                }
+            )
+        }
+    }
+
+    fun selectRestoreMode(mode: WorkspaceRestoreMode) {
+        _uiState.update { it.copy(selectedRestoreMode = mode) }
+    }
+
+    fun confirmRestore() {
+        val preview = _uiState.value.selectedBackupPreview ?: return
+        if (_uiState.value.isRestoring || _uiState.value.isCreatingBackup) return
+        val mode = _uiState.value.selectedRestoreMode
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRestoring = true, error = null) }
+            when (val result = backupManager.restoreBackup(preview.fileName, mode)) {
+                is WorkspaceBackupResult.RestoreSuccess -> _uiState.update {
+                    it.copy(
+                        isRestoring = false,
+                        selectedBackupPreview = null,
+                        message = "Đã khôi phục ${result.importedCount} workspace"
+                    )
+                }
+                else -> _uiState.update {
+                    it.copy(isRestoring = false, error = result.errorMessage())
+                }
+            }
+        }
+    }
+
+    fun cancelBackupPreview() {
+        _uiState.update { it.copy(selectedBackupPreview = null) }
+    }
+
     fun consumeMessage() = _uiState.update { it.copy(message = null) }
     fun consumeError() = _uiState.update { it.copy(error = null) }
 
     private fun reportError(message: String) {
         _uiState.update { it.copy(error = message, previewWorkspace = null) }
     }
+}
+
+private fun WorkspaceBackupResult.errorMessage(): String = when (this) {
+    is WorkspaceBackupResult.InvalidBackup -> message
+    is WorkspaceBackupResult.UnsupportedVersion -> "Không hỗ trợ backup version $version"
+    is WorkspaceBackupResult.FileError -> message ?: "Không thể xử lý backup"
+    WorkspaceBackupResult.Cancelled -> "Đã hủy"
+    is WorkspaceBackupResult.BackupSuccess,
+    is WorkspaceBackupResult.RestoreSuccess -> "Không thể xử lý backup"
 }

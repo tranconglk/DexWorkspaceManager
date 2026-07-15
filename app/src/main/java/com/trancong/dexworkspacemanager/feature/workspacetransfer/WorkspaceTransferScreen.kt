@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,11 +15,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -37,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trancong.dexworkspacemanager.DexWorkspaceManagerApplication
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceRestoreMode
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun WorkspaceTransferRoute(onBackClick: () -> Unit) {
@@ -44,7 +50,8 @@ fun WorkspaceTransferRoute(onBackClick: () -> Unit) {
     val factory = remember(application) {
         WorkspaceTransferViewModelFactory(
             application.container.workspaceRepository,
-            application.container.workspaceTransferDirectory
+            application.container.workspaceTransferDirectory,
+            application.container.workspaceBackupManager
         )
     }
     val viewModel: WorkspaceTransferViewModel = viewModel(factory = factory)
@@ -63,6 +70,11 @@ fun WorkspaceTransferRoute(onBackClick: () -> Unit) {
         onFileClick = viewModel::selectFile,
         onConfirmImport = viewModel::confirmImport,
         onCancelImport = viewModel::cancelPreview,
+        onCreateBackup = viewModel::createBackup,
+        onBackupFileClick = viewModel::selectBackup,
+        onRestoreModeSelected = viewModel::selectRestoreMode,
+        onConfirmRestore = viewModel::confirmRestore,
+        onCancelBackupPreview = viewModel::cancelBackupPreview,
         snackbarHostState = snackbarHostState
     )
 }
@@ -76,6 +88,11 @@ fun WorkspaceTransferScreen(
     onFileClick: (String) -> Unit,
     onConfirmImport: () -> Unit,
     onCancelImport: () -> Unit,
+    onCreateBackup: () -> Unit,
+    onBackupFileClick: (String) -> Unit,
+    onRestoreModeSelected: (WorkspaceRestoreMode) -> Unit,
+    onConfirmRestore: () -> Unit,
+    onCancelBackupPreview: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
@@ -93,6 +110,53 @@ fun WorkspaceTransferScreen(
             },
             confirmButton = { TextButton(onClick = onConfirmImport) { Text("Import") } },
             dismissButton = { TextButton(onClick = onCancelImport) { Text("Hủy") } }
+        )
+    }
+    uiState.selectedBackupPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = onCancelBackupPreview,
+            title = {
+                Text(
+                    if (uiState.selectedRestoreMode == WorkspaceRestoreMode.REPLACE_ALL) {
+                        "Thay thế toàn bộ workspace?"
+                    } else {
+                        "Khôi phục backup"
+                    }
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (uiState.selectedRestoreMode == WorkspaceRestoreMode.REPLACE_ALL) {
+                        Text("Tất cả workspace hiện tại sẽ bị thay thế bằng dữ liệu trong bản backup.")
+                    }
+                    Text(preview.fileName, fontWeight = FontWeight.SemiBold)
+                    Text("Ngày xuất: ${formatTimestamp(preview.exportedAt)}")
+                    Text("Số workspace: ${preview.workspaceCount}")
+                    Text("Yêu thích: ${preview.favoriteCount}")
+                    Text("Tổng app assignments: ${preview.totalAssignments}")
+                    preview.workspaceNames.forEach { Text("• $it") }
+                    RestoreModeOption(
+                        selected = uiState.selectedRestoreMode,
+                        onSelected = onRestoreModeSelected
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmRestore, enabled = !uiState.isRestoring) {
+                    Text(
+                        if (uiState.selectedRestoreMode == WorkspaceRestoreMode.REPLACE_ALL) {
+                            "Thay thế"
+                        } else {
+                            "Thêm ${preview.workspaceCount} workspace"
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelBackupPreview, enabled = !uiState.isRestoring) {
+                    Text("Hủy")
+                }
+            }
         )
     }
     Scaffold(
@@ -114,33 +178,86 @@ fun WorkspaceTransferScreen(
             )
         }
     ) { padding ->
-        when {
-            uiState.isLoading -> Box(
+        if (uiState.isLoading) {
+            Box(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
-            uiState.importFiles.isEmpty() -> Column(
-                Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("Chưa có file JSON trong thư mục imports")
-                Text(
-                    "Sao chép file vào Android/data/com.trancong.dexworkspacemanager/files/imports",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            else -> LazyColumn(
+        } else {
+            LazyColumn(
                 Modifier.fillMaxSize().padding(padding),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item {
+                    Text("Backup toàn bộ", style = MaterialTheme.typography.titleLarge)
+                }
+                item {
+                    Button(
+                        onClick = onCreateBackup,
+                        enabled = !uiState.isCreatingBackup && !uiState.isRestoring,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (uiState.isCreatingBackup) CircularProgressIndicator()
+                        else Text("Tạo bản backup")
+                    }
+                }
+                item {
+                    Text("Khôi phục backup", style = MaterialTheme.typography.titleLarge)
+                }
+                if (uiState.backupFiles.isEmpty()) {
+                    item { Text("Chưa có file backup collection trong thư mục imports") }
+                } else {
+                    items(uiState.backupFiles, key = { "backup:$it" }) { fileName ->
+                        Card(Modifier.fillMaxWidth().clickable { onBackupFileClick(fileName) }) {
+                            Text(fileName, Modifier.padding(16.dp))
+                        }
+                    }
+                }
+                item {
+                    Text("Import một workspace", style = MaterialTheme.typography.titleLarge)
+                }
+                if (uiState.importFiles.isEmpty()) {
+                    item {
+                        Text("Chưa có file JSON trong thư mục imports")
+                    }
+                }
                 items(uiState.importFiles, key = { it }) { fileName ->
                     Card(Modifier.fillMaxWidth().clickable { onFileClick(fileName) }) {
                         Text(fileName, Modifier.padding(16.dp))
                     }
                 }
+                item {
+                    Text(
+                        "Sao chép file vào Android/data/com.trancong.dexworkspacemanager/files/imports",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }
 }
+
+@Composable
+private fun RestoreModeOption(
+    selected: WorkspaceRestoreMode,
+    onSelected: (WorkspaceRestoreMode) -> Unit
+) {
+    Column {
+        WorkspaceRestoreMode.entries.forEach { mode ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selected == mode, onClick = { onSelected(mode) })
+                Text(
+                    if (mode == WorkspaceRestoreMode.MERGE) {
+                        "Thêm vào dữ liệu hiện có"
+                    } else {
+                        "Thay thế toàn bộ dữ liệu hiện có"
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun formatTimestamp(timestamp: Long): String =
+    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(timestamp))

@@ -9,6 +9,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.json.JSONObject
 
 class WorkspaceTransferDirectory(
     context: Context,
@@ -40,10 +41,63 @@ class WorkspaceTransferDirectory(
 
     suspend fun listImportFiles(): List<String> = withContext(Dispatchers.IO) {
         importsDirectory?.apply { mkdirs() }
-            ?.listFiles { file -> file.isFile && file.extension.equals("json", true) }
+            ?.listFiles { file ->
+                file.isFile && file.extension.equals("json", true) && runCatching {
+                    !JSONObject(file.readText(Charsets.UTF_8)).has("backupSchemaVersion")
+                }.getOrDefault(true)
+            }
             ?.sortedByDescending(File::lastModified)
             ?.map(File::getName)
             .orEmpty()
+    }
+
+    suspend fun listBackupFiles(): List<String> = withContext(Dispatchers.IO) {
+        importsDirectory?.apply { mkdirs() }
+            ?.listFiles { file ->
+                file.isFile && file.extension.equals("json", true) && runCatching {
+                    JSONObject(file.readText(Charsets.UTF_8)).has("backupSchemaVersion")
+                }.getOrDefault(false)
+            }
+            ?.sortedByDescending(File::lastModified)
+            ?.map(File::getName)
+            .orEmpty()
+    }
+
+    suspend fun writeBackup(json: String, exportedAt: Long): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val directory = requireNotNull(exportsDirectory) { "Không mở được thư mục exports" }
+                directory.mkdirs()
+                val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+                    .format(Date(exportedAt))
+                var file = File(
+                    directory,
+                    "${WorkspaceTransferContract.BACKUP_FILE_PREFIX}-$timestamp.json"
+                )
+                var suffix = 2
+                while (file.exists()) {
+                    file = File(
+                        directory,
+                        "${WorkspaceTransferContract.BACKUP_FILE_PREFIX}-$timestamp-$suffix.json"
+                    )
+                    suffix += 1
+                }
+                file.writeText(json, Charsets.UTF_8)
+                file.name
+            }
+        }
+
+    suspend fun readImportText(fileName: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val safeName = File(fileName).name
+            require(safeName == fileName && safeName.endsWith(".json", true)) {
+                "Tên file không hợp lệ"
+            }
+            val directory = requireNotNull(importsDirectory) { "Không mở được thư mục imports" }
+            val file = File(directory, safeName)
+            require(file.isFile) { "Không tìm thấy file" }
+            file.readText(Charsets.UTF_8)
+        }
     }
 
     suspend fun readImport(fileName: String): WorkspaceTransferResult = withContext(Dispatchers.IO) {

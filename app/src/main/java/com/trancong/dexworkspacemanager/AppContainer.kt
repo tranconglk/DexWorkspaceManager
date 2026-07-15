@@ -18,6 +18,8 @@ import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.AndroidInstalledAppsProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppsProvider
 import com.trancong.dexworkspacemanager.platform.transfer.DefaultWorkspaceJsonSerializer
+import com.trancong.dexworkspacemanager.platform.transfer.DefaultWorkspaceBackupJsonSerializer
+import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceBackupManager
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
 
 interface AppContainer {
@@ -28,6 +30,7 @@ interface AppContainer {
     val foregroundAppLauncher: ForegroundAppLauncher
     val workspaceLaunchCoordinator: WorkspaceLaunchCoordinator
     val workspaceTransferDirectory: WorkspaceTransferDirectory
+    val workspaceBackupManager: WorkspaceBackupManager
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -51,8 +54,16 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val workspaceLaunchCoordinator = WorkspaceLaunchCoordinator(foregroundAppLauncher)
 
+    private val workspaceJsonSerializer = DefaultWorkspaceJsonSerializer()
+
     override val workspaceTransferDirectory = WorkspaceTransferDirectory(
         context.applicationContext,
-        DefaultWorkspaceJsonSerializer()
+        workspaceJsonSerializer
+    )
+
+    override val workspaceBackupManager = WorkspaceBackupManager(
+        workspaceRepository,
+        DefaultWorkspaceBackupJsonSerializer(workspaceJsonSerializer),
+        workspaceTransferDirectory
     )
 }

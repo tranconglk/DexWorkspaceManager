@@ -24,6 +24,10 @@ class WorkspaceRepositoryImpl(
         workspaceDao.getByIdWithAssignments(id)?.toDomain()
 
     override suspend fun save(workspace: Workspace): Long = database.withTransaction {
+        saveInTransaction(workspace)
+    }
+
+    private suspend fun saveInTransaction(workspace: Workspace): Long {
         val workspaceId = workspaceDao.upsert(workspace.toEntity())
         assignmentDao.deleteByWorkspaceId(workspaceId)
         if (workspace.appAssignments.isNotEmpty()) {
@@ -31,7 +35,7 @@ class WorkspaceRepositoryImpl(
                 workspace.appAssignments.map { it.toEntity(workspaceId) }
             )
         }
-        workspaceId
+        return workspaceId
     }
 
     override suspend fun deleteById(id: Long) {
@@ -67,5 +71,16 @@ class WorkspaceRepositoryImpl(
                 isFavorite = false
             )
         )
+    }
+
+    override suspend fun mergeAll(workspaces: List<Workspace>): Int = database.withTransaction {
+        workspaces.forEach { saveInTransaction(it.copy(id = 0)) }
+        workspaces.size
+    }
+
+    override suspend fun replaceAll(workspaces: List<Workspace>): Int = database.withTransaction {
+        workspaceDao.deleteAll()
+        workspaces.forEach { saveInTransaction(it.copy(id = 0)) }
+        workspaces.size
     }
 }
