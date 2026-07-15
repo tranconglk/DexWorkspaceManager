@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Gradle automatically enforces gradle/verification-metadata.xml in strict mode.
+  # Gradle enforces committed dependency lock state and verification metadata.
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest

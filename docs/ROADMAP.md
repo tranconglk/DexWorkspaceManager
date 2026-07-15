@@ -21,8 +21,9 @@ Danh sách này mô tả chức năng có trong implementation; mức độ xác
 - CI unit test/build: implemented, pending verification on GitHub Actions.
 - DLM-040 supply-chain baseline: wrapper checksum, wrapper validation, Dependency Review, and monthly Dependabot implemented.
 - Gradle Dependency Verification with reviewed SHA-256 metadata and strict builds: implemented.
+- Gradle Dependency Locking for reviewed app, test, KSP, and lint classpaths: implemented.
 - PGP signature verification: future.
-- Dependency locking: evaluate later; direct versions are currently pinned in the version catalog and build scripts.
+- Reproducible APK byte-for-byte: future investigation; dependency locking alone does not guarantee identical APK bytes.
 - Instrumentation CI: future; hiện chạy local trên thiết bị Android kết nối.
 - Release build.
 - Dọn log.

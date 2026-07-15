@@ -44,6 +44,26 @@ android {
     }
 }
 
+val lockedConfigurationNames = setOf(
+    "androidLintTool",
+    "debugAndroidTestCompileClasspath",
+    "debugAndroidTestRuntimeClasspath",
+    "debugCompileClasspath",
+    "debugRuntimeClasspath",
+    "debugUnitTestCompileClasspath",
+    "debugUnitTestRuntimeClasspath",
+    "kspDebugKotlinProcessorClasspath",
+    "kspReleaseKotlinProcessorClasspath",
+    "releaseCompileClasspath",
+    "releaseRuntimeClasspath",
+)
+
+configurations.configureEach {
+    if (name in lockedConfigurationNames) {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

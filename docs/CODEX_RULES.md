@@ -27,3 +27,6 @@ Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project De
 23. Không dùng `--dependency-verification off` hoặc xóa verification metadata để làm CI xanh.
 24. Không tự động sinh verification metadata trong GitHub Actions.
 25. Không nâng dependency khi metadata mới chưa được review.
+26. Mọi thay đổi dependency phải cập nhật và review cả lock state lẫn verification metadata.
+27. Không chạy `--write-locks` trong GitHub Actions hoặc xóa lock file để né lỗi.
+28. Không thêm version động; lock file là artifact bắt buộc phải được review.

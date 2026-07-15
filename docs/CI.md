@@ -28,8 +28,10 @@ connected Android device when required.
   configured.
 - Gradle automatically enforces `gradle/verification-metadata.xml` in strict mode. A missing or
   mismatched checksum fails the affected CI job.
-- CI verifies the reviewed metadata but never generates or updates it. Dependency changes,
-  including Dependabot updates, must include a separately reviewed metadata diff.
+- Gradle also enforces the committed `app/gradle.lockfile`. A missing dependency or resolved
+  version that conflicts with the lock state fails the affected CI job.
+- CI verifies reviewed lock state and metadata but never generates or updates either file.
+  Dependency changes, including Dependabot updates, must include reviewed lock and metadata diffs.
 - CI builds an unsigned release APK only; it does not sign production APKs and has no signing
   credentials.
 
