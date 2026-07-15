@@ -19,6 +19,7 @@ Danh sách này mô tả chức năng có trong implementation; mức độ xác
 ## Stabilization
 
 - CI unit test/build: implemented, pending verification on GitHub Actions.
+- DLM-040 supply-chain baseline: wrapper checksum, wrapper validation, Dependency Review, and monthly Dependabot implemented; dependency verification metadata and locking deferred to DLM-041.
 - Instrumentation CI: future; hiện chạy local trên thiết bị Android kết nối.
 - Release build.
 - Dọn log.

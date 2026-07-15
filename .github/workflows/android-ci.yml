@@ -31,6 +31,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
+        # setup-gradle v4+ validates every Gradle Wrapper JAR in the repository.
         uses: gradle/actions/setup-gradle@v6
 
       - name: Make Gradle wrapper executable
@@ -64,6 +65,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
+        # setup-gradle v4+ validates every Gradle Wrapper JAR in the repository.
         uses: gradle/actions/setup-gradle@v6
 
       - name: Make Gradle wrapper executable
@@ -101,6 +103,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Gradle
+        # setup-gradle v4+ validates every Gradle Wrapper JAR in the repository.
         uses: gradle/actions/setup-gradle@v6
 
       - name: Make Gradle wrapper executable

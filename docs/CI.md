@@ -17,6 +17,18 @@ Build artifacts are retained for seven days:
 Instrumentation tests are intentionally not run in this basic CI workflow. Run them on a local
 connected Android device when required.
 
+## Supply-chain checks
+
+- The Gradle distribution is pinned by SHA-256 in `gradle-wrapper.properties`.
+- `gradle/actions/setup-gradle@v6` validates Gradle Wrapper JARs in every Android CI job.
+- The `Dependency Review` workflow runs only on pull requests and rejects newly introduced
+  dependencies with high or critical known vulnerabilities.
+- Dependabot checks Gradle and GitHub Actions dependencies monthly, with at most five open pull
+  requests per ecosystem. Updates require normal review; no automatic merge or signing secret is
+  configured.
+- Dependency verification metadata and dependency locking are deferred to DLM-041 so the full
+  plugin and transitive dependency graph can be reviewed before enforcement is enabled.
+
 Equivalent local commands on Windows are:
 
 ```powershell
