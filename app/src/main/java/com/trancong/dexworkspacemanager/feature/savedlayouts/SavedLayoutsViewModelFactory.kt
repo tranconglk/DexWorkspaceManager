@@ -6,11 +6,13 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
 import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
+import com.trancong.dexworkspacemanager.platform.installedapps.PackageChangeMonitor
 
 class SavedLayoutsViewModelFactory(
     private val workspaceRepository: WorkspaceRepository,
     private val workspaceTransferDirectory: WorkspaceTransferDirectory,
-    private val availabilityChecker: WorkspaceAppsAvailabilityChecker
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
+    private val packageChangeMonitor: PackageChangeMonitor
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(
         modelClass: Class<T>,
@@ -21,7 +23,8 @@ class SavedLayoutsViewModelFactory(
             return SavedLayoutsViewModel(
                 workspaceRepository,
                 workspaceTransferDirectory,
-                availabilityChecker
+                availabilityChecker,
+                packageChangeMonitor
             ) as T
         }
 

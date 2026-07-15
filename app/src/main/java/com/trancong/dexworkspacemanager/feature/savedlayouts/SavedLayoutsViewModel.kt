@@ -10,6 +10,7 @@ import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResu
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferResult
 import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
+import com.trancong.dexworkspacemanager.platform.installedapps.PackageChangeMonitor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,19 +18,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class SavedLayoutsViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val workspaceTransferDirectory: WorkspaceTransferDirectory,
-    private val availabilityChecker: WorkspaceAppsAvailabilityChecker
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
+    packageChangeMonitor: PackageChangeMonitor
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SavedLayoutsUiState())
     val uiState: StateFlow<SavedLayoutsUiState> = _uiState.asStateFlow()
     private var latestWorkspaces: List<Workspace> = emptyList()
     private var availabilityJob: Job? = null
+    private var packageRefreshJob: Job? = null
 
     init {
         observeWorkspaces()
+        viewModelScope.launch {
+            packageChangeMonitor.events.collect { event ->
+                if (latestWorkspaces.any { workspace ->
+                        workspace.appAssignments.any { it.packageName == event.packageName }
+                    }
+                ) {
+                    packageRefreshJob?.cancel()
+                    packageRefreshJob = viewModelScope.launch {
+                        delay(PACKAGE_CHANGE_DEBOUNCE_MS)
+                        refreshAppAvailability()
+                    }
+                }
+            }
+        }
     }
 
     fun refreshAppAvailability() {
@@ -304,6 +322,8 @@ class SavedLayoutsViewModel(
         }
     }
 }
+
+private const val PACKAGE_CHANGE_DEBOUNCE_MS = 200L
 
 private fun List<WorkspaceLaunchFailure>.failedAppSummary(): String =
     map(WorkspaceLaunchFailure::appLabel).distinct().take(3).joinToString()

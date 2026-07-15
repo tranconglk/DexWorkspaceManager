@@ -75,7 +75,8 @@ fun SavedLayoutsRoute(
         SavedLayoutsViewModelFactory(
             application.container.workspaceRepository,
             application.container.workspaceTransferDirectory,
-            application.container.workspaceAppsAvailabilityChecker
+            application.container.workspaceAppsAvailabilityChecker,
+            application.container.packageChangeMonitor
         )
     }
     val viewModel: SavedLayoutsViewModel = viewModel(factory = viewModelFactory)

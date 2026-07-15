@@ -10,12 +10,17 @@ import com.trancong.dexworkspacemanager.platform.dex.isRunningOnExternalDisplay
 import com.trancong.dexworkspacemanager.ui.theme.DexWorkspaceManagerTheme
 
 class MainActivity : ComponentActivity() {
+    private var packageMonitorStarted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!isRunningOnExternalDisplay()) {
             finish()
             return
         }
+
+        applicationContainer.packageChangeMonitor.start()
+        packageMonitorStarted = true
 
         enableEdgeToEdge()
         setContent {
@@ -32,4 +37,15 @@ class MainActivity : ComponentActivity() {
             finish()
         }
     }
+
+    override fun onDestroy() {
+        if (packageMonitorStarted) {
+            applicationContainer.packageChangeMonitor.stop()
+            packageMonitorStarted = false
+        }
+        super.onDestroy()
+    }
+
+    private val applicationContainer: AppContainer
+        get() = (application as DexWorkspaceManagerApplication).container
 }

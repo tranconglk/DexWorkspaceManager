@@ -82,7 +82,8 @@ fun HomeRoute(
         HomeViewModelFactory(
             application.container.workspaceRepository,
             application.container.appPreferencesRepository,
-            application.container.workspaceAppsAvailabilityChecker
+            application.container.workspaceAppsAvailabilityChecker,
+            application.container.packageChangeMonitor
         )
     }
     val viewModel: HomeViewModel = viewModel(factory = factory)

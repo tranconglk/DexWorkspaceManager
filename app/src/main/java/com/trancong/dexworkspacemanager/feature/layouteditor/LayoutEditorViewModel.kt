@@ -12,6 +12,7 @@ import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
 import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
+import com.trancong.dexworkspacemanager.platform.installedapps.PackageChangeMonitor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,19 +20,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class LayoutEditorViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val appLauncher: AppLauncher,
     private val dexDisplayProvider: DexDisplayProvider,
     private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
+    packageChangeMonitor: PackageChangeMonitor,
     workspaceId: Long?
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LayoutEditorUiState())
     val uiState: StateFlow<LayoutEditorUiState> = _uiState.asStateFlow()
     private var availabilityJob: Job? = null
+    private var packageRefreshJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            packageChangeMonitor.events.collect { event ->
+                if (_uiState.value.appAssignments.values.any {
+                        it.packageName == event.packageName
+                    }
+                ) {
+                    packageRefreshJob?.cancel()
+                    packageRefreshJob = viewModelScope.launch {
+                        delay(PACKAGE_CHANGE_DEBOUNCE_MS)
+                        refreshAppAvailability()
+                    }
+                }
+            }
+        }
         refreshDexDisplayState()
         if (workspaceId != null) {
             loadWorkspace(workspaceId)
@@ -572,6 +590,7 @@ class LayoutEditorViewModel(
 
     private companion object {
         const val MAX_FAILURE_LABELS_IN_MESSAGE = 3
+        const val PACKAGE_CHANGE_DEBOUNCE_MS = 200L
     }
 
     private fun moveAssignment(zoneId: String, direction: Int) {

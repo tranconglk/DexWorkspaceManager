@@ -104,6 +104,7 @@ fun LayoutEditorRoute(
             appLauncher = application.container.appLauncher,
             dexDisplayProvider = application.container.dexDisplayProvider,
             availabilityChecker = application.container.workspaceAppsAvailabilityChecker,
+            packageChangeMonitor = application.container.packageChangeMonitor,
             workspaceId = workspaceId
         )
     }

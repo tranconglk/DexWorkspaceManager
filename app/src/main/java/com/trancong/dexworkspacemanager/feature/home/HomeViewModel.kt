@@ -9,6 +9,7 @@ import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchFail
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
 import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
+import com.trancong.dexworkspacemanager.platform.installedapps.PackageChangeMonitor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,18 +18,35 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 
 class HomeViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val appPreferencesRepository: AppPreferencesRepository,
-    private val availabilityChecker: WorkspaceAppsAvailabilityChecker
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
+    packageChangeMonitor: PackageChangeMonitor
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     private var latestWorkspaces: List<Workspace> = emptyList()
     private var availabilityJob: Job? = null
+    private var packageRefreshJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            packageChangeMonitor.events.collect { event ->
+                if (latestWorkspaces.any { workspace ->
+                        workspace.appAssignments.any { it.packageName == event.packageName }
+                    }
+                ) {
+                    packageRefreshJob?.cancel()
+                    packageRefreshJob = viewModelScope.launch {
+                        delay(PACKAGE_CHANGE_DEBOUNCE_MS)
+                        refreshAppAvailability()
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             try {
                 combine(
@@ -277,5 +295,6 @@ class HomeViewModel(
 
     private companion object {
         const val HOME_WORKSPACE_LIMIT = 4
+        const val PACKAGE_CHANGE_DEBOUNCE_MS = 200L
     }
 }

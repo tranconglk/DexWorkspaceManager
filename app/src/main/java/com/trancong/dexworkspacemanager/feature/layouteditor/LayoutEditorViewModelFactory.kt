@@ -7,12 +7,14 @@ import com.trancong.dexworkspacemanager.domain.repository.WorkspaceRepository
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
+import com.trancong.dexworkspacemanager.platform.installedapps.PackageChangeMonitor
 
 class LayoutEditorViewModelFactory(
     private val workspaceRepository: WorkspaceRepository,
     private val appLauncher: AppLauncher,
     private val dexDisplayProvider: DexDisplayProvider,
     private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
+    private val packageChangeMonitor: PackageChangeMonitor,
     private val workspaceId: Long?
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(
@@ -26,6 +28,7 @@ class LayoutEditorViewModelFactory(
                 appLauncher = appLauncher,
                 dexDisplayProvider = dexDisplayProvider,
                 availabilityChecker = availabilityChecker,
+                packageChangeMonitor = packageChangeMonitor,
                 workspaceId = workspaceId
             ) as T
         }
