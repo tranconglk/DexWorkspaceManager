@@ -104,9 +104,7 @@ class LayoutEditorViewModel(
     ) {
         _uiState.update { currentState ->
             val launchOrder = currentState.appAssignments[zoneId]?.launchOrder
-                ?: ((currentState.appAssignments.values.maxOfOrNull {
-                    it.launchOrder
-                } ?: -1) + 1)
+                ?: LaunchOrderNormalizer.nextOrder(currentState.appAssignments.values)
             val assignment = ZoneAppAssignment(
                 zoneId = zoneId,
                 packageName = packageName,
@@ -619,7 +617,4 @@ private val assignmentOrderComparator = compareBy<ZoneAppAssignment> { it.launch
     .thenBy { it.zoneId }
 
 private fun Map<String, ZoneAppAssignment>.normalizedLaunchOrder():
-    Map<String, ZoneAppAssignment> = values
-    .sortedWith(assignmentOrderComparator)
-    .mapIndexed { index, assignment -> assignment.copy(launchOrder = index) }
-    .associateBy(ZoneAppAssignment::zoneId)
+    Map<String, ZoneAppAssignment> = LaunchOrderNormalizer.normalize(values)

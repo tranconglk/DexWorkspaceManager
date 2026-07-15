@@ -57,34 +57,21 @@ class HomeViewModel(
                     Triple(workspaces, quickLaunchId, showDexPinHint)
                 }.collect { (workspaces, savedQuickLaunchId, showDexPinHint) ->
                     latestWorkspaces = workspaces
+                    val selection = WorkspaceHomeSorter.sort(
+                        workspaces,
+                        savedQuickLaunchId,
+                        HOME_WORKSPACE_LIMIT
+                    )
                     _uiState.update { currentState ->
-                        val allFavorites = workspaces
-                            .filter(Workspace::isFavorite)
-                            .sortedByDescending(Workspace::updatedAt)
-                        val favorites = allFavorites.take(HOME_WORKSPACE_LIMIT)
-                        val favoriteIds = allFavorites.mapTo(mutableSetOf(), Workspace::id)
-                        val recent = workspaces
-                            .filterNot { it.id in favoriteIds }
-                            .sortedByDescending(Workspace::updatedAt)
-                            .take(HOME_WORKSPACE_LIMIT)
-                        val quickLaunchWorkspace = allFavorites.firstOrNull {
-                            it.id == savedQuickLaunchId
-                        } ?: allFavorites.firstOrNull()
                         currentState.copy(
-                            favoriteWorkspaces = favorites,
-                            recentWorkspaces = recent,
-                            quickLaunchWorkspace = quickLaunchWorkspace,
+                            favoriteWorkspaces = selection.favorites,
+                            recentWorkspaces = selection.recent,
+                            quickLaunchWorkspace = selection.quickLaunchWorkspace,
                             showDexPinHint = showDexPinHint,
                             isLoading = false
                         )
                     }
-                    val validQuickLaunchId = workspaces
-                        .filter(Workspace::isFavorite)
-                        .sortedByDescending(Workspace::updatedAt)
-                        .firstOrNull { it.id == savedQuickLaunchId }
-                        ?.id
-                        ?: workspaces.filter(Workspace::isFavorite)
-                            .maxByOrNull(Workspace::updatedAt)?.id
+                    val validQuickLaunchId = selection.quickLaunchWorkspace?.id
                     if (validQuickLaunchId != savedQuickLaunchId) {
                         appPreferencesRepository.setQuickLaunchWorkspaceId(validQuickLaunchId)
                     }
