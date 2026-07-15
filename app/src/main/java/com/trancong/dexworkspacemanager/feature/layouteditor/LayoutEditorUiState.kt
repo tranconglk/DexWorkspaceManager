@@ -1,6 +1,7 @@
 package com.trancong.dexworkspacemanager.feature.layouteditor
 
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 
 data class LayoutEditorUiState(
     val workspaceId: Long? = null,
@@ -16,6 +17,7 @@ data class LayoutEditorUiState(
     val saveMessage: String? = null,
     val saveError: String? = null,
     val appAssignments: Map<String, ZoneAppAssignment> = emptyMap(),
+    val appAvailabilityByZoneId: Map<String, InstalledAppAvailability> = emptyMap(),
     val launchMessage: String? = null,
     val launchError: String? = null,
     val dexDisplayState: DexDisplayState = DexDisplayState.NotConnected,

@@ -8,6 +8,7 @@ import com.trancong.dexworkspacemanager.domain.repository.AppPreferencesReposito
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchFailure
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
+import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,13 +16,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class HomeViewModel(
     private val workspaceRepository: WorkspaceRepository,
-    private val appPreferencesRepository: AppPreferencesRepository
+    private val appPreferencesRepository: AppPreferencesRepository,
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    private var latestWorkspaces: List<Workspace> = emptyList()
+    private var availabilityJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -33,6 +38,7 @@ class HomeViewModel(
                 ) { workspaces, quickLaunchId, showDexPinHint ->
                     Triple(workspaces, quickLaunchId, showDexPinHint)
                 }.collect { (workspaces, savedQuickLaunchId, showDexPinHint) ->
+                    latestWorkspaces = workspaces
                     _uiState.update { currentState ->
                         val allFavorites = workspaces
                             .filter(Workspace::isFavorite)
@@ -64,6 +70,7 @@ class HomeViewModel(
                     if (validQuickLaunchId != savedQuickLaunchId) {
                         appPreferencesRepository.setQuickLaunchWorkspaceId(validQuickLaunchId)
                     }
+                    refreshAppAvailability()
                 }
             } catch (exception: CancellationException) {
                 throw exception
@@ -74,6 +81,21 @@ class HomeViewModel(
                         error = "Không thể tải danh sách workspace. Vui lòng thử lại"
                     )
                 }
+            }
+        }
+    }
+
+    fun refreshAppAvailability() {
+        val snapshot = latestWorkspaces
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch {
+            val result = buildMap {
+                snapshot.forEach { workspace ->
+                    put(workspace.id, availabilityChecker.check(workspace.appAssignments))
+                }
+            }
+            if (latestWorkspaces === snapshot) {
+                _uiState.update { it.copy(appAvailabilityByWorkspaceId = result) }
             }
         }
     }

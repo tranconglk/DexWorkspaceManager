@@ -9,22 +9,42 @@ import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProg
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirectory
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferResult
+import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class SavedLayoutsViewModel(
     private val workspaceRepository: WorkspaceRepository,
-    private val workspaceTransferDirectory: WorkspaceTransferDirectory
+    private val workspaceTransferDirectory: WorkspaceTransferDirectory,
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SavedLayoutsUiState())
     val uiState: StateFlow<SavedLayoutsUiState> = _uiState.asStateFlow()
+    private var latestWorkspaces: List<Workspace> = emptyList()
+    private var availabilityJob: Job? = null
 
     init {
         observeWorkspaces()
+    }
+
+    fun refreshAppAvailability() {
+        val snapshot = latestWorkspaces
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch {
+            val result = buildMap {
+                snapshot.forEach { workspace ->
+                    put(workspace.id, availabilityChecker.check(workspace.appAssignments))
+                }
+            }
+            if (latestWorkspaces === snapshot) {
+                _uiState.update { it.copy(appAvailabilityByWorkspaceId = result) }
+            }
+        }
     }
 
     fun requestDelete(workspace: Workspace) {
@@ -259,6 +279,7 @@ class SavedLayoutsViewModel(
         viewModelScope.launch {
             try {
                 workspaceRepository.observeAll().collect { workspaces ->
+                    latestWorkspaces = workspaces
                     _uiState.update { currentState ->
                         currentState.copy(
                             workspaces = workspaces.sortedWith(
@@ -268,6 +289,7 @@ class SavedLayoutsViewModel(
                             isLoading = false
                         )
                     }
+                    refreshAppAvailability()
                 }
             } catch (exception: CancellationException) {
                 throw exception

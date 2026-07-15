@@ -1,10 +1,12 @@
 package com.trancong.dexworkspacemanager.platform.installedapps
 
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 class AndroidInstalledAppsProvider(context: Context) : InstalledAppsProvider {
@@ -40,4 +42,60 @@ class AndroidInstalledAppsProvider(context: Context) : InstalledAppsProvider {
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { app -> app.label })
             .toList()
     }
+
+    override suspend fun checkAvailability(
+        packageName: String,
+        activityName: String
+    ): InstalledAppAvailability = withContext(Dispatchers.IO) {
+        try {
+            val applicationInfo = try {
+                getApplicationInfo(packageName)
+            } catch (_: PackageManager.NameNotFoundException) {
+                return@withContext InstalledAppAvailability.PackageMissing
+            }
+            if (!applicationInfo.enabled) {
+                return@withContext InstalledAppAvailability.Disabled
+            }
+
+            val activityInfo = try {
+                getActivityInfo(ComponentName(packageName, activityName))
+            } catch (_: PackageManager.NameNotFoundException) {
+                return@withContext InstalledAppAvailability.ActivityMissing
+            }
+            if (!activityInfo.enabled) {
+                return@withContext InstalledAppAvailability.Disabled
+            }
+            InstalledAppAvailability.Available
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            InstalledAppAvailability.UnknownError(exception.message?.take(160))
+        }
+    }
+
+    private fun getApplicationInfo(packageName: String) =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getApplicationInfo(
+                packageName,
+                PackageManager.ApplicationInfoFlags.of(
+                    PackageManager.MATCH_DISABLED_COMPONENTS.toLong()
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getApplicationInfo(packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
+        }
+
+    private fun getActivityInfo(componentName: ComponentName) =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getActivityInfo(
+                componentName,
+                PackageManager.ComponentInfoFlags.of(
+                    PackageManager.MATCH_DISABLED_COMPONENTS.toLong()
+                )
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getActivityInfo(componentName, PackageManager.MATCH_DISABLED_COMPONENTS)
+        }
 }

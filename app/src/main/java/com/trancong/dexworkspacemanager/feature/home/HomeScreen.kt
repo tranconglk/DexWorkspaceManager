@@ -66,6 +66,7 @@ import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProg
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.currentExternalDisplayWorkArea
 import com.trancong.dexworkspacemanager.platform.applauncher.isRunningOnExternalDisplay
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -80,7 +81,8 @@ fun HomeRoute(
     val factory = remember(application) {
         HomeViewModelFactory(
             application.container.workspaceRepository,
-            application.container.appPreferencesRepository
+            application.container.appPreferencesRepository,
+            application.container.workspaceAppsAvailabilityChecker
         )
     }
     val viewModel: HomeViewModel = viewModel(factory = factory)
@@ -120,6 +122,7 @@ fun HomeRoute(
         onCancelRename = viewModel::cancelRename,
         onConfirmDuplicate = viewModel::confirmDuplicate,
         onCancelDuplicate = viewModel::cancelDuplicate,
+        onRefreshAppAvailability = viewModel::refreshAppAvailability,
         onLaunchWorkspace = { workspace ->
             if (launchJob?.isActive != true) {
                 val workArea = activity?.currentExternalDisplayWorkArea()
@@ -175,6 +178,7 @@ fun HomeScreen(
     onCancelRename: () -> Unit,
     onConfirmDuplicate: (String) -> Unit,
     onCancelDuplicate: () -> Unit,
+    onRefreshAppAvailability: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
@@ -215,6 +219,12 @@ fun HomeScreen(
                 if (uiState.showDexPinHint) {
                     item { DexPinHint(onDismissDexPinHint) }
                 }
+                item {
+                    OutlinedButton(
+                        onClick = onRefreshAppAvailability,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Làm mới ứng dụng") }
+                }
                 when {
                     uiState.isLoading -> item {
                         Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) {
@@ -242,6 +252,7 @@ fun HomeScreen(
                                     favorites = uiState.favoriteWorkspaces,
                                     isLaunching = uiState.launchingWorkspaceId == quickWorkspace.id,
                                     launchProgress = uiState.launchProgress,
+                                    availability = uiState.appAvailabilityByWorkspaceId[quickWorkspace.id].orEmpty(),
                                     onLaunch = { onLaunchWorkspace(quickWorkspace) },
                                     onEdit = { onEditWorkspace(quickWorkspace.id) },
                                     onSelectWorkspace = onSelectQuickLaunch
@@ -358,6 +369,7 @@ private fun WorkspaceCardRow(
                                     workspace = workspace,
                                     isLaunching = uiState.launchingWorkspaceId == workspace.id,
                                     launchProgress = uiState.launchProgress,
+                                    availability = uiState.appAvailabilityByWorkspaceId[workspace.id].orEmpty(),
                                     onEdit = { onEditWorkspace(workspace.id) },
                                     onLaunch = { onLaunchWorkspace(workspace) },
                                     onToggleFavorite = { onToggleFavorite(workspace) },
@@ -387,12 +399,35 @@ private fun QuickLaunchCard(
     favorites: List<Workspace>,
     isLaunching: Boolean,
     launchProgress: WorkspaceLaunchProgress,
+    availability: Map<String, InstalledAppAvailability>,
     onLaunch: () -> Unit,
     onEdit: () -> Unit,
     onSelectWorkspace: (Long) -> Unit
 ) {
     var selectorExpanded by remember { mutableStateOf(false) }
+    var showUnavailableConfirmation by remember { mutableStateOf(false) }
     val assignments = workspace.appAssignments.sortedBy { it.launchOrder }
+    val unavailableLabels = workspace.unavailableLabels(availability)
+    if (showUnavailableConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showUnavailableConfirmation = false },
+            title = { Text("Workspace có ứng dụng không khả dụng") },
+            text = {
+                Text(
+                    "Không thể mở: ${unavailableLabels.joinToString()}. " +
+                        "Các ứng dụng còn lại vẫn sẽ được khởi chạy."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showUnavailableConfirmation = false; onLaunch() }) {
+                    Text("Tiếp tục")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnavailableConfirmation = false }) { Text("Hủy") }
+            }
+        )
+    }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -426,6 +461,7 @@ private fun QuickLaunchCard(
             }
             assignments.take(3).forEach { Text("• ${it.appLabel}") }
             if (assignments.size > 3) Text("+${assignments.size - 3} ứng dụng")
+            AvailabilityWarning(unavailableLabels)
             Text("${workspace.zoneCount()} vùng  •  Chờ ${workspace.launchDelayMs} ms")
             if (isLaunching) {
                 LinearProgressIndicator(
@@ -439,7 +475,9 @@ private fun QuickLaunchCard(
                 Text("${launchProgress.completedApps}/${launchProgress.totalApps}")
             }
             Button(
-                onClick = onLaunch,
+                onClick = {
+                    if (unavailableLabels.isEmpty()) onLaunch() else showUnavailableConfirmation = true
+                },
                 enabled = !isLaunching && assignments.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -476,6 +514,7 @@ private fun WorkspaceProfileCard(
     workspace: Workspace,
     isLaunching: Boolean,
     launchProgress: WorkspaceLaunchProgress,
+    availability: Map<String, InstalledAppAvailability>,
     onEdit: () -> Unit,
     onLaunch: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -537,6 +576,7 @@ private fun WorkspaceProfileCard(
             }
             if (assignments.size > 3) Text("+${assignments.size - 3} ứng dụng")
             if (assignments.isEmpty()) Text("Chưa gán ứng dụng")
+            AvailabilityWarning(workspace.unavailableLabels(availability))
             Text("${workspace.zoneCount()} vùng  •  Chờ ${workspace.launchDelayMs} ms")
             if (isLaunching) {
                 LinearProgressIndicator(
@@ -565,6 +605,26 @@ private fun WorkspaceProfileCard(
         }
     }
 }
+
+@Composable
+private fun AvailabilityWarning(labels: List<String>) {
+    if (labels.isNotEmpty()) {
+        Text(
+            "⚠ ${labels.size} ứng dụng không khả dụng" +
+                labels.take(2).joinToString(prefix = ": "),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+private fun Workspace.unavailableLabels(
+    availability: Map<String, InstalledAppAvailability>
+): List<String> = appAssignments.mapNotNull { assignment ->
+    availability[assignment.zoneId]
+        ?.takeUnless { it == InstalledAppAvailability.Available }
+        ?.let { assignment.appLabel }
+}.distinct()
 
 @Composable
 private fun WorkspaceNameDialog(

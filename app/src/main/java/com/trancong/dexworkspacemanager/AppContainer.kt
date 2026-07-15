@@ -20,6 +20,7 @@ import com.trancong.dexworkspacemanager.platform.dex.AndroidDexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.AndroidInstalledAppsProvider
 import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppsProvider
+import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
 import com.trancong.dexworkspacemanager.platform.transfer.DefaultWorkspaceJsonSerializer
 import com.trancong.dexworkspacemanager.platform.transfer.DefaultWorkspaceBackupJsonSerializer
 import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceBackupManager
@@ -28,6 +29,7 @@ import com.trancong.dexworkspacemanager.platform.transfer.WorkspaceTransferDirec
 interface AppContainer {
     val workspaceRepository: WorkspaceRepository
     val installedAppsProvider: InstalledAppsProvider
+    val workspaceAppsAvailabilityChecker: WorkspaceAppsAvailabilityChecker
     val appLauncher: AppLauncher
     val dexDisplayProvider: DexDisplayProvider
     val foregroundAppLauncher: ForegroundAppLauncher
@@ -52,6 +54,9 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val installedAppsProvider: InstalledAppsProvider =
         AndroidInstalledAppsProvider(context)
+
+    override val workspaceAppsAvailabilityChecker =
+        WorkspaceAppsAvailabilityChecker(installedAppsProvider)
 
     override val appLauncher: AppLauncher = AndroidAppLauncher(context)
 

@@ -40,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -72,6 +73,7 @@ import com.trancong.dexworkspacemanager.domain.model.WorkspaceAppAssignment
 import com.trancong.dexworkspacemanager.navigation.AppRoute
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
 import com.trancong.dexworkspacemanager.platform.dex.ExternalDisplayInfo
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 import com.trancong.dexworkspacemanager.platform.dex.DexWorkArea
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.LaunchBounds
@@ -101,6 +103,7 @@ fun LayoutEditorRoute(
             workspaceRepository = application.container.workspaceRepository,
             appLauncher = application.container.appLauncher,
             dexDisplayProvider = application.container.dexDisplayProvider,
+            availabilityChecker = application.container.workspaceAppsAvailabilityChecker,
             workspaceId = workspaceId
         )
     }
@@ -161,6 +164,8 @@ fun LayoutEditorRoute(
             topRatio = uiState.topRatio,
             onTopRatioChange = viewModel::updateTopRatio,
             appAssignments = uiState.appAssignments,
+            appAvailabilityByZoneId = uiState.appAvailabilityByZoneId,
+            onRefreshAppAvailability = viewModel::refreshAppAvailability,
             launchDelayMs = uiState.launchDelayMs,
             onLaunchDelayChange = viewModel::updateLaunchDelay,
             onMoveAssignmentUp = viewModel::moveAssignmentUp,
@@ -381,6 +386,8 @@ fun LayoutEditorScreen(
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
     appAssignments: Map<String, ZoneAppAssignment>,
+    appAvailabilityByZoneId: Map<String, InstalledAppAvailability>,
+    onRefreshAppAvailability: () -> Unit,
     launchDelayMs: Long,
     onLaunchDelayChange: (Long) -> Unit,
     onMoveAssignmentUp: (String) -> Unit,
@@ -585,6 +592,11 @@ fun LayoutEditorScreen(
                 onDiagnosticsClick = { isDiagnosticsVisible = true }
             )
 
+            OutlinedButton(
+                onClick = onRefreshAppAvailability,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Làm mới ứng dụng") }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -599,6 +611,7 @@ fun LayoutEditorScreen(
                     topRatio = topRatio,
                     onTopRatioChange = onTopRatioChange,
                     appAssignments = appAssignments,
+                    appAvailabilityByZoneId = appAvailabilityByZoneId,
                     onZoneClick = onZoneClick,
                     onRemoveAppFromZone = onRemoveAppFromZone,
                     onLaunchAppForZone = onLaunchAppForZone,
@@ -905,6 +918,7 @@ private fun LayoutPreview(
     topRatio: Float,
     onTopRatioChange: (Float) -> Unit,
     appAssignments: Map<String, ZoneAppAssignment>,
+    appAvailabilityByZoneId: Map<String, InstalledAppAvailability>,
     onZoneClick: (String) -> Unit,
     onRemoveAppFromZone: (String) -> Unit,
     onLaunchAppForZone: (String) -> Unit,
@@ -938,6 +952,7 @@ private fun LayoutPreview(
                     PreviewZone(
                         zone = zone,
                         assignment = appAssignments[zone.id],
+                        availability = appAvailabilityByZoneId[zone.id],
                         isEditingEnabled = isEditingEnabled,
                         onClick = { onZoneClick(zone.id) },
                         onRemoveClick = { onRemoveAppFromZone(zone.id) },
@@ -1024,6 +1039,7 @@ private fun LayoutPreview(
 private fun PreviewZone(
     zone: LayoutZone,
     assignment: ZoneAppAssignment?,
+    availability: InstalledAppAvailability?,
     isEditingEnabled: Boolean,
     onClick: () -> Unit,
     onRemoveClick: () -> Unit,
@@ -1060,6 +1076,16 @@ private fun PreviewZone(
                     text = assignment.packageName,
                     style = MaterialTheme.typography.bodySmall
                 )
+                availability?.warningMessage()?.let { warning ->
+                    Text(
+                        text = warning,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    TextButton(onClick = onClick, enabled = isEditingEnabled) {
+                        Text("Chọn lại ứng dụng")
+                    }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onLaunchClick, enabled = isEditingEnabled) {
                         Text("Mở thử")
@@ -1082,6 +1108,14 @@ private fun PreviewZone(
     }
 }
 
+private fun InstalledAppAvailability.warningMessage(): String? = when (this) {
+    InstalledAppAvailability.Available -> null
+    InstalledAppAvailability.PackageMissing -> "Ứng dụng đã bị gỡ"
+    InstalledAppAvailability.ActivityMissing -> "Điểm khởi chạy đã thay đổi"
+    InstalledAppAvailability.Disabled -> "Ứng dụng đang bị tắt"
+    is InstalledAppAvailability.UnknownError -> "Không thể kiểm tra ứng dụng"
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun LayoutEditorScreenPreview() {
@@ -1096,6 +1130,8 @@ private fun LayoutEditorScreenPreview() {
             topRatio = 0.5f,
             onTopRatioChange = {},
             appAssignments = emptyMap(),
+            appAvailabilityByZoneId = emptyMap(),
+            onRefreshAppAvailability = {},
             launchDelayMs = 400L,
             onLaunchDelayChange = {},
             onMoveAssignmentUp = {},

@@ -10,21 +10,26 @@ import com.trancong.dexworkspacemanager.platform.applauncher.AppLaunchResult
 import com.trancong.dexworkspacemanager.platform.applauncher.AppLauncher
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayProvider
 import com.trancong.dexworkspacemanager.platform.dex.DexDisplayState
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
+import com.trancong.dexworkspacemanager.platform.installedapps.WorkspaceAppsAvailabilityChecker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class LayoutEditorViewModel(
     private val workspaceRepository: WorkspaceRepository,
     private val appLauncher: AppLauncher,
     private val dexDisplayProvider: DexDisplayProvider,
+    private val availabilityChecker: WorkspaceAppsAvailabilityChecker,
     workspaceId: Long?
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LayoutEditorUiState())
     val uiState: StateFlow<LayoutEditorUiState> = _uiState.asStateFlow()
+    private var availabilityJob: Job? = null
 
     init {
         refreshDexDisplayState()
@@ -44,7 +49,9 @@ class LayoutEditorViewModel(
                 selectedTemplate = template,
                 appAssignments = currentState.appAssignments
                     .filterKeys(validZoneIds::contains)
-                    .normalizedLaunchOrder()
+                    .normalizedLaunchOrder(),
+                appAvailabilityByZoneId = currentState.appAvailabilityByZoneId
+                    .filterKeys(validZoneIds::contains)
             )
         }
     }
@@ -65,7 +72,8 @@ class LayoutEditorViewModel(
         _uiState.update { currentState ->
             currentState.copy(
                 selectedTemplate = LayoutTemplate.EMPTY,
-                appAssignments = emptyMap()
+                appAssignments = emptyMap(),
+                appAvailabilityByZoneId = emptyMap()
             )
         }
     }
@@ -89,7 +97,9 @@ class LayoutEditorViewModel(
                 launchOrder = launchOrder
             )
             currentState.copy(
-                appAssignments = currentState.appAssignments + (zoneId to assignment)
+                appAssignments = currentState.appAssignments + (zoneId to assignment),
+                appAvailabilityByZoneId = currentState.appAvailabilityByZoneId +
+                    (zoneId to InstalledAppAvailability.Available)
             )
         }
     }
@@ -97,8 +107,20 @@ class LayoutEditorViewModel(
     fun removeAppFromZone(zoneId: String) {
         _uiState.update { currentState ->
             currentState.copy(
-                appAssignments = (currentState.appAssignments - zoneId).normalizedLaunchOrder()
+                appAssignments = (currentState.appAssignments - zoneId).normalizedLaunchOrder(),
+                appAvailabilityByZoneId = currentState.appAvailabilityByZoneId - zoneId
             )
+        }
+    }
+
+    fun refreshAppAvailability() {
+        val snapshot = _uiState.value.appAssignments
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch {
+            val result = availabilityChecker.check(snapshot.values.map { it.toDomain() })
+            if (_uiState.value.appAssignments == snapshot) {
+                _uiState.update { it.copy(appAvailabilityByZoneId = result) }
+            }
         }
     }
 
@@ -533,6 +555,7 @@ class LayoutEditorViewModel(
                             loadError = null
                         )
                     }
+                    refreshAppAvailability()
                 }
             } catch (exception: CancellationException) {
                 throw exception

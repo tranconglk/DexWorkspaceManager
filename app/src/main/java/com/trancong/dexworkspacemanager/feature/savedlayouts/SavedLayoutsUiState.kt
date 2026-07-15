@@ -2,9 +2,11 @@ package com.trancong.dexworkspacemanager.feature.savedlayouts
 
 import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 
 data class SavedLayoutsUiState(
     val workspaces: List<Workspace> = emptyList(),
+    val appAvailabilityByWorkspaceId: Map<Long, Map<String, InstalledAppAvailability>> = emptyMap(),
     val isLoading: Boolean = true,
     val workspacePendingDelete: Workspace? = null,
     val workspacePendingRename: Workspace? = null,

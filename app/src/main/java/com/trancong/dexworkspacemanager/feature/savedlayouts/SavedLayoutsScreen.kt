@@ -58,6 +58,7 @@ import com.trancong.dexworkspacemanager.domain.model.Workspace
 import com.trancong.dexworkspacemanager.feature.layouteditor.LayoutTemplate
 import com.trancong.dexworkspacemanager.platform.applauncher.currentExternalDisplayWorkArea
 import com.trancong.dexworkspacemanager.platform.applauncher.isRunningOnExternalDisplay
+import com.trancong.dexworkspacemanager.platform.installedapps.InstalledAppAvailability
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -73,7 +74,8 @@ fun SavedLayoutsRoute(
     val viewModelFactory = remember(application) {
         SavedLayoutsViewModelFactory(
             application.container.workspaceRepository,
-            application.container.workspaceTransferDirectory
+            application.container.workspaceTransferDirectory,
+            application.container.workspaceAppsAvailabilityChecker
         )
     }
     val viewModel: SavedLayoutsViewModel = viewModel(factory = viewModelFactory)
@@ -165,6 +167,7 @@ fun SavedLayoutsRoute(
             }
         },
         onCancelWorkspaceLaunch = { launchJob?.cancel() },
+        onRefreshAppAvailability = viewModel::refreshAppAvailability,
         snackbarHostState = snackbarHostState
     )
 }
@@ -189,6 +192,7 @@ fun SavedLayoutsScreen(
     onImportWorkspace: () -> Unit,
     onLaunchWorkspace: (Workspace) -> Unit,
     onCancelWorkspaceLaunch: () -> Unit,
+    onRefreshAppAvailability: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
@@ -268,6 +272,11 @@ fun SavedLayoutsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
+                    TextButton(onClick = onRefreshAppAvailability, modifier = Modifier.fillMaxWidth()) {
+                        Text("Làm mới ứng dụng")
+                    }
+                }
+                item {
                     TextButton(onClick = onImportWorkspace, modifier = Modifier.fillMaxWidth()) {
                         Text("Import workspace")
                     }
@@ -280,6 +289,7 @@ fun SavedLayoutsScreen(
                         workspace = workspace,
                         launchingWorkspaceId = uiState.launchingWorkspaceId,
                         launchProgress = uiState.launchProgress,
+                        availability = uiState.appAvailabilityByWorkspaceId[workspace.id].orEmpty(),
                         onClick = { onWorkspaceClick(workspace) },
                         onDeleteClick = { onDeleteClick(workspace) },
                         onToggleFavorite = { onToggleFavorite(workspace) },
@@ -327,6 +337,7 @@ private fun WorkspaceCard(
     workspace: Workspace,
     launchingWorkspaceId: Long?,
     launchProgress: com.trancong.dexworkspacemanager.feature.layouteditor.WorkspaceLaunchProgress,
+    availability: Map<String, InstalledAppAvailability>,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -368,6 +379,19 @@ private fun WorkspaceCard(
                     text = "Cập nhật: ${formatTimestamp(workspace.updatedAt)}",
                     style = MaterialTheme.typography.bodySmall
                 )
+                val unavailableLabels = workspace.appAssignments.mapNotNull { assignment ->
+                    availability[assignment.zoneId]
+                        ?.takeUnless { it == InstalledAppAvailability.Available }
+                        ?.let { assignment.appLabel }
+                }.distinct()
+                if (unavailableLabels.isNotEmpty()) {
+                    Text(
+                        "⚠ ${unavailableLabels.size} ứng dụng không khả dụng: " +
+                            unavailableLabels.take(2).joinToString(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 if (isLaunching) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
