@@ -24,10 +24,25 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 workspaceRepository.observeAll().collect { workspaces ->
-                    _uiState.update {
-                        it.copy(
-                            workspaces = workspaces.sortedForProfiles()
-                                .take(RECENT_WORKSPACE_LIMIT),
+                    _uiState.update { currentState ->
+                        val favorites = workspaces
+                            .filter(Workspace::isFavorite)
+                            .sortedByDescending(Workspace::updatedAt)
+                            .take(HOME_WORKSPACE_LIMIT)
+                        val favoriteIds = workspaces
+                            .filter(Workspace::isFavorite)
+                            .mapTo(mutableSetOf(), Workspace::id)
+                        val recent = workspaces
+                            .filterNot { it.id in favoriteIds }
+                            .sortedByDescending(Workspace::updatedAt)
+                            .take(HOME_WORKSPACE_LIMIT)
+                        val selectedQuickLaunchId = currentState.quickLaunchWorkspace?.id
+                        currentState.copy(
+                            favoriteWorkspaces = favorites,
+                            recentWorkspaces = recent,
+                            quickLaunchWorkspace = favorites.firstOrNull {
+                                it.id == selectedQuickLaunchId
+                            } ?: favorites.firstOrNull(),
                             isLoading = false
                         )
                     }
@@ -182,6 +197,12 @@ class HomeViewModel(
         }
     }
 
+    fun selectQuickLaunchWorkspace(workspaceId: Long) {
+        val selected = _uiState.value.favoriteWorkspaces.firstOrNull { it.id == workspaceId }
+            ?: return
+        _uiState.update { it.copy(quickLaunchWorkspace = selected) }
+    }
+
     fun consumeOperationMessage() = consumeMessage()
 
     fun consumeOperationError() = consumeError()
@@ -208,11 +229,6 @@ class HomeViewModel(
         map(WorkspaceLaunchFailure::appLabel).distinct().take(3).joinToString()
 
     private companion object {
-        const val RECENT_WORKSPACE_LIMIT = 4
+        const val HOME_WORKSPACE_LIMIT = 4
     }
 }
-
-private fun List<Workspace>.sortedForProfiles(): List<Workspace> = sortedWith(
-    compareByDescending<Workspace> { it.isFavorite }
-        .thenByDescending { it.updatedAt }
-)

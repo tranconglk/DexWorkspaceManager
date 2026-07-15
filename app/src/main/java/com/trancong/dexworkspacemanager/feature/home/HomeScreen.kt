@@ -108,6 +108,7 @@ fun HomeRoute(
         onViewAllWorkspaces = onViewAllWorkspaces,
         onEditWorkspace = onEditWorkspace,
         onToggleFavorite = viewModel::toggleFavorite,
+        onSelectQuickLaunch = viewModel::selectQuickLaunchWorkspace,
         onRenameWorkspace = viewModel::requestRename,
         onDuplicateWorkspace = viewModel::requestDuplicate,
         onConfirmRename = viewModel::confirmRename,
@@ -142,6 +143,10 @@ fun HomeRoute(
                         launchJob = null
                     }
                 }
+            } else {
+                routeScope.launch {
+                    snackbarHostState.showSnackbar("Workspace đang được khởi chạy")
+                }
             }
         },
         snackbarHostState = snackbarHostState
@@ -157,6 +162,7 @@ fun HomeScreen(
     onEditWorkspace: (Long) -> Unit,
     onLaunchWorkspace: (Workspace) -> Unit,
     onToggleFavorite: (Workspace) -> Unit,
+    onSelectQuickLaunch: (Long) -> Unit,
     onRenameWorkspace: (Workspace) -> Unit,
     onDuplicateWorkspace: (Workspace) -> Unit,
     onConfirmRename: (String) -> Unit,
@@ -200,23 +206,121 @@ fun HomeScreen(
                 contentPadding = PaddingValues(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item {
-                    Text(
-                        text = "Workspace gần đây",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
                 when {
                     uiState.isLoading -> item {
                         Box(Modifier.fillMaxWidth().padding(48.dp), Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-                    uiState.workspaces.isEmpty() -> item {
+                    uiState.favoriteWorkspaces.isEmpty() && uiState.recentWorkspaces.isEmpty() -> item {
                         EmptyWorkspaceContent(onCreateWorkspace)
                     }
-                    else -> items(uiState.workspaces.chunked(columns)) { rowWorkspaces ->
+                    else -> {
+                        item {
+                            Text(
+                                "Quick Launch",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        item {
+                            val quickWorkspace = uiState.quickLaunchWorkspace
+                            if (quickWorkspace == null) {
+                                NoQuickLaunchContent(onViewAllWorkspaces)
+                            } else {
+                                QuickLaunchCard(
+                                    workspace = quickWorkspace,
+                                    favorites = uiState.favoriteWorkspaces,
+                                    isLaunching = uiState.launchingWorkspaceId == quickWorkspace.id,
+                                    launchProgress = uiState.launchProgress,
+                                    onLaunch = { onLaunchWorkspace(quickWorkspace) },
+                                    onEdit = { onEditWorkspace(quickWorkspace.id) },
+                                    onSelectWorkspace = onSelectQuickLaunch
+                                )
+                            }
+                        }
+                        if (uiState.favoriteWorkspaces.any {
+                                it.id != uiState.quickLaunchWorkspace?.id
+                            }
+                        ) {
+                            item {
+                                Text(
+                                    "Yêu thích",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        items(
+                            uiState.favoriteWorkspaces
+                                .filterNot { it.id == uiState.quickLaunchWorkspace?.id }
+                                .chunked(columns)
+                        ) { rowWorkspaces ->
+                            WorkspaceCardRow(
+                                rowWorkspaces = rowWorkspaces,
+                                columns = columns,
+                                uiState = uiState,
+                                onEditWorkspace = onEditWorkspace,
+                                onLaunchWorkspace = onLaunchWorkspace,
+                                onToggleFavorite = onToggleFavorite,
+                                onRenameWorkspace = onRenameWorkspace,
+                                onDuplicateWorkspace = onDuplicateWorkspace
+                            )
+                        }
+                        if (uiState.recentWorkspaces.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Workspace gần đây",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        items(uiState.recentWorkspaces.chunked(columns)) { rowWorkspaces ->
+                            WorkspaceCardRow(
+                                rowWorkspaces = rowWorkspaces,
+                                columns = columns,
+                                uiState = uiState,
+                                onEditWorkspace = onEditWorkspace,
+                                onLaunchWorkspace = onLaunchWorkspace,
+                                onToggleFavorite = onToggleFavorite,
+                                onRenameWorkspace = onRenameWorkspace,
+                                onDuplicateWorkspace = onDuplicateWorkspace
+                            )
+                        }
+                    }
+                }
+                if (!uiState.isLoading &&
+                    (uiState.favoriteWorkspaces.isNotEmpty() || uiState.recentWorkspaces.isNotEmpty())
+                ) {
+                    item {
+                        OutlinedButton(onClick = onCreateWorkspace, Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Text("  Tạo workspace mới")
+                        }
+                    }
+                }
+                item {
+                    OutlinedButton(onClick = onViewAllWorkspaces, Modifier.fillMaxWidth()) {
+                        Text("Xem tất cả workspace")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceCardRow(
+    rowWorkspaces: List<Workspace>,
+    columns: Int,
+    uiState: HomeUiState,
+    onEditWorkspace: (Long) -> Unit,
+    onLaunchWorkspace: (Workspace) -> Unit,
+    onToggleFavorite: (Workspace) -> Unit,
+    onRenameWorkspace: (Workspace) -> Unit,
+    onDuplicateWorkspace: (Workspace) -> Unit
+) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -236,21 +340,87 @@ fun HomeScreen(
                             }
                             if (rowWorkspaces.size < columns) Box(Modifier.weight(1f))
                         }
-                    }
-                }
-                if (!uiState.isLoading && uiState.workspaces.isNotEmpty()) {
-                    item {
-                        OutlinedButton(onClick = onCreateWorkspace, Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Text("  Tạo workspace mới")
+}
+
+@Composable
+private fun NoQuickLaunchContent(onViewAllWorkspaces: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Chưa có workspace yêu thích", style = MaterialTheme.typography.titleLarge)
+            Text("Đánh dấu một workspace là yêu thích để sử dụng Quick Launch.")
+            OutlinedButton(onClick = onViewAllWorkspaces) { Text("Xem tất cả workspace") }
+        }
+    }
+}
+
+@Composable
+private fun QuickLaunchCard(
+    workspace: Workspace,
+    favorites: List<Workspace>,
+    isLaunching: Boolean,
+    launchProgress: WorkspaceLaunchProgress,
+    onLaunch: () -> Unit,
+    onEdit: () -> Unit,
+    onSelectWorkspace: (Long) -> Unit
+) {
+    var selectorExpanded by remember { mutableStateOf(false) }
+    val assignments = workspace.appAssignments.sortedBy { it.launchOrder }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    workspace.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                if (favorites.size > 1) {
+                    Box {
+                        TextButton(onClick = { selectorExpanded = true }) {
+                            Text("Chọn Quick Launch")
+                        }
+                        DropdownMenu(
+                            expanded = selectorExpanded,
+                            onDismissRequest = { selectorExpanded = false }
+                        ) {
+                            favorites.forEach { favorite ->
+                                DropdownMenuItem(
+                                    text = { Text(favorite.name) },
+                                    onClick = {
+                                        selectorExpanded = false
+                                        onSelectWorkspace(favorite.id)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-                item {
-                    OutlinedButton(onClick = onViewAllWorkspaces, Modifier.fillMaxWidth()) {
-                        Text("Xem tất cả workspace")
-                    }
-                }
+            }
+            assignments.take(3).forEach { Text("• ${it.appLabel}") }
+            if (assignments.size > 3) Text("+${assignments.size - 3} ứng dụng")
+            Text("${workspace.zoneCount()} vùng  •  Chờ ${workspace.launchDelayMs} ms")
+            if (isLaunching) {
+                LinearProgressIndicator(
+                    progress = { launchProgress.progressFraction },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    launchProgress.currentAppLabel?.let { "Đang mở $it" }
+                        ?: "Đang khởi chạy…"
+                )
+                Text("${launchProgress.completedApps}/${launchProgress.totalApps}")
+            }
+            Button(
+                onClick = onLaunch,
+                enabled = !isLaunching && assignments.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Text(" Khởi chạy ngay")
+            }
+            TextButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = null)
+                Text(" Chỉnh sửa")
             }
         }
     }
