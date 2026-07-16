@@ -4,7 +4,11 @@
 
 - Release manifest/checksum workflow: implemented; release output is complete only after the script succeeds.
 - Artifact attestation: future.
-- SBOM: future.
+- CycloneDX SBOM: implemented after `generateReleaseSbom` passes in strict verification mode.
+- SBOM attestation: future.
+- Provenance attestation: future.
+- SBOM vulnerability scan: future.
+- VEX: future.
 - Reproducible APK investigation: future; no byte-for-byte reproducibility claim is made.
 
 ## MVP v0.1

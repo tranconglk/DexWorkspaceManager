@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ApkPath,
     [string]$VersionName,
     [string]$OutputDirectory,
+    [string]$SbomPath,
+    [switch]$GenerateSbom,
     [switch]$RunVerification,
     [switch]$AllowDirtyWorkingTree
 )
@@ -90,6 +92,35 @@ try {
     foreach ($key in $required) { if (-not $info.ContainsKey($key)) { throw "Gradle did not return $key." } }
     if (-not $VersionName) { $VersionName = $info.VERSION_NAME }
     if ([string]::IsNullOrWhiteSpace($VersionName)) { throw "VersionName is empty; pass -VersionName." }
+    if ($GenerateSbom -and $SbomPath) { throw "Use either -GenerateSbom or -SbomPath, not both." }
+    if (-not $GenerateSbom -and -not $SbomPath) {
+        throw "A release SBOM is required. Use -GenerateSbom or pass -SbomPath."
+    }
+
+    if ($GenerateSbom) {
+        Invoke-CommandChecked $GradleWrapper @(":app:generateReleaseSbom", "--rerun-tasks") | Out-Null
+        $SbomPath = Join-Path $ProjectRoot "app\build\reports\sbom\dex-workspace-manager-v$VersionName.cdx.json"
+    } elseif (-not [IO.Path]::IsPathRooted($SbomPath)) {
+        $SbomPath = Join-Path $ProjectRoot $SbomPath
+    }
+    $resolvedSbom = Resolve-Path -LiteralPath $SbomPath -ErrorAction SilentlyContinue
+    if (-not $resolvedSbom -or -not (Test-Path -LiteralPath $resolvedSbom.Path -PathType Leaf)) {
+        throw "SBOM was not found: $SbomPath"
+    }
+    try { $sbom = Get-Content -Raw -LiteralPath $resolvedSbom.Path | ConvertFrom-Json }
+    catch { throw "SBOM is not valid JSON: $($_.Exception.Message)" }
+    if ($sbom.bomFormat -ne "CycloneDX") { throw "SBOM bomFormat must be CycloneDX." }
+    if ([string]::IsNullOrWhiteSpace($sbom.specVersion)) { throw "SBOM specVersion is missing." }
+    if (@($sbom.components).Count -eq 0 -and @($sbom.dependencies).Count -eq 0) {
+        throw "SBOM must contain components or dependency relationships."
+    }
+    if (-not $sbom.metadata -or -not $sbom.metadata.component) {
+        throw "SBOM metadata.component is missing."
+    }
+    $sbomTool = @($sbom.metadata.tools.components) | Select-Object -First 1
+    if (-not $sbomTool -or [string]::IsNullOrWhiteSpace($sbomTool.name)) {
+        throw "SBOM generation tool metadata is missing."
+    }
 
     $apksigner = Find-ApkSigner
     $verify = Invoke-CommandChecked $apksigner @("verify", "--verbose", "--print-certs", $resolvedApk.Path) -AllowFailure
@@ -147,8 +178,14 @@ try {
     if (-not $OutputDirectory) { $OutputDirectory = Join-Path $ProjectRoot "releases\v$VersionName" }
     elseif (-not [IO.Path]::IsPathRooted($OutputDirectory)) { $OutputDirectory = Join-Path $ProjectRoot $OutputDirectory }
     $null = New-Item -ItemType Directory -Path $OutputDirectory -Force
+    $sbomFileName = "dex-workspace-manager-v$VersionName.cdx.json"
+    $publishedSbomPath = Join-Path $OutputDirectory $sbomFileName
+    if ($resolvedSbom.Path -ne $publishedSbomPath) {
+        Copy-Item -LiteralPath $resolvedSbom.Path -Destination $publishedSbomPath -Force
+    }
+    $sbomHash = (Get-FileHash -LiteralPath $publishedSbomPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $checksumPath = Join-Path $OutputDirectory "CHECKSUMS.sha256"
-    Set-Content $checksumPath "$apkHash  $($apk.Name)" -Encoding UTF8
+    Set-Content $checksumPath @("$apkHash  $($apk.Name)", "$sbomHash  $sbomFileName") -Encoding UTF8
 
     $clean = if ($isClean) { "yes" } else { "no" }
     $manifestPath = Join-Path $OutputDirectory "RELEASE_MANIFEST.md"
@@ -207,6 +244,18 @@ try {
 * assembleDebug: $($tasks.assembleDebug)
 * assembleRelease: $($tasks.assembleRelease)
 
+## Software Bill of Materials
+
+* Format: CycloneDX JSON
+* File name: $sbomFileName
+* SBOM specification version: $($sbom.specVersion)
+* SBOM SHA-256: $sbomHash
+* Generation tool: $($sbomTool.name)
+* Generation tool version: $($sbomTool.version)
+* Generated from Git commit: $commit
+* Dependency verification state: $metadata ($mode)
+* Dependency lock state: $lockState
+
 ## Device Compatibility
 
 * Note8 Hades ROM v3: NOT TESTED
@@ -254,6 +303,7 @@ $rows
     Write-Host "Certificate match: $cert256"
     Write-Host "Checksum: $checksumPath"
     Write-Host "Manifest: $manifestPath"
+    Write-Host "SBOM: $publishedSbomPath"
     Write-Host "Device test report: $reportPath"
     if ($verificationFailed) { Write-Error "Verification failed; a diagnostic manifest was created." -ErrorAction Continue; exit 1 }
 } finally { Pop-Location }

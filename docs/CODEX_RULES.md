@@ -6,6 +6,9 @@
 - Không tự đánh dấu device test là `PASS` khi chưa có kết quả kiểm thử thực tế.
 - Không commit APK, keystore hoặc password.
 - Mỗi release phải có `RELEASE_MANIFEST.md` và `CHECKSUMS.sha256` đã được review.
+- Mỗi release phải có CycloneDX SBOM sinh từ dependency state đã commit.
+- Không chỉnh SBOM thủ công hoặc dùng SBOM từ commit khác.
+- Mọi dependency update phải sinh lại SBOM release.
 
 Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project DeX Workspace Manager:
 

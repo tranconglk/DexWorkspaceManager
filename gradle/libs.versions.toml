@@ -12,6 +12,7 @@ composeBom = "2026.06.01"
 room = "2.8.4"
 datastore = "1.2.1"
 ksp = "2.3.6"
+cyclonedx = "3.2.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -40,3 +41,4 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx" }
