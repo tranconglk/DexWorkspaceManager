@@ -99,7 +99,7 @@ try {
 
     if ($GenerateSbom) {
         Invoke-CommandChecked $GradleWrapper @(":app:generateReleaseSbom", "--rerun-tasks") | Out-Null
-        $SbomPath = Join-Path $ProjectRoot "app\build\reports\sbom\dex-workspace-manager-v$VersionName.cdx.json"
+        $SbomPath = Join-Path $ProjectRoot "releases\v$VersionName\dex-workspace-manager-v$VersionName.cdx.json"
     } elseif (-not [IO.Path]::IsPathRooted($SbomPath)) {
         $SbomPath = Join-Path $ProjectRoot $SbomPath
     }

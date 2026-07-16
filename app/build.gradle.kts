@@ -1,7 +1,3 @@
-import org.cyclonedx.Version
-import org.cyclonedx.gradle.CyclonedxDirectTask
-import org.cyclonedx.model.Component
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -110,25 +106,14 @@ tasks.register("printReleaseInfo") {
     }
 }
 
-val releaseSbomFileName = "dex-workspace-manager-v${android.defaultConfig.versionName}.cdx.json"
+val releaseVersionName = checkNotNull(android.defaultConfig.versionName)
+val releaseSbomFileName = "dex-workspace-manager-v$releaseVersionName.cdx.json"
 
-tasks.named<CyclonedxDirectTask>("cyclonedxDirectBom") {
-    includeConfigs.set(listOf("releaseRuntimeClasspath"))
-    projectType.set(Component.Type.APPLICATION)
-    schemaVersion.set(Version.VERSION_16)
-    componentName.set(rootProject.name)
-    componentGroup.set(android.defaultConfig.applicationId)
-    componentVersion.set(android.defaultConfig.versionName)
-    includeBomSerialNumber.set(true)
-    includeBuildEnvironment.set(false)
-    includeBuildSystem.set(false)
-    includeLicenseText.set(false)
-    jsonOutput.set(layout.buildDirectory.file("reports/sbom/$releaseSbomFileName"))
-    xmlOutput.unsetConvention()
-}
-
-tasks.register("generateReleaseSbom") {
+tasks.register<Copy>("generateReleaseSbom") {
     group = "reporting"
-    description = "Generates the release runtime dependency SBOM in CycloneDX JSON format."
+    description = "Copies and renames the plugin-generated CycloneDX JSON release SBOM."
     dependsOn("cyclonedxDirectBom")
+    from(layout.buildDirectory.file("reports/cyclonedx-direct/bom.json"))
+    into(rootProject.layout.projectDirectory.dir("releases/v$releaseVersionName"))
+    rename { releaseSbomFileName }
 }
