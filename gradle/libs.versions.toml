@@ -11,7 +11,7 @@ kotlin = "2.2.10"
 composeBom = "2026.06.01"
 room = "2.8.4"
 datastore = "1.2.1"
-ksp = "2.3.6"
+ksp = "2.3.10"
 cyclonedx = "3.2.4"
 
 [libraries]
