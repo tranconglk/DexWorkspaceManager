@@ -1,5 +1,12 @@
 # Roadmap
 
+## Release engineering
+
+- Release manifest/checksum workflow: implemented; release output is complete only after the script succeeds.
+- Artifact attestation: future.
+- SBOM: future.
+- Reproducible APK investigation: future; no byte-for-byte reproducibility claim is made.
+
 ## MVP v0.1
 
 Các khả năng hiện có trong project:

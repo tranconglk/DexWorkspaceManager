@@ -1,5 +1,12 @@
 # Codex Rules
 
+## Release rules
+
+- Không phát hành APK nếu certificate fingerprint không khớp certificate release đã đăng ký.
+- Không tự đánh dấu device test là `PASS` khi chưa có kết quả kiểm thử thực tế.
+- Không commit APK, keystore hoặc password.
+- Mỗi release phải có `RELEASE_MANIFEST.md` và `CHECKSUMS.sha256` đã được review.
+
 Các quy tắc này áp dụng cho mọi task Codex tiếp theo trong project DeX Workspace Manager:
 
 1. Đọc project trước khi sửa.
