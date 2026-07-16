@@ -88,3 +88,19 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
+tasks.register("printReleaseInfo") {
+    group = "help"
+    description = "Prints release metadata for the release manifest script."
+    notCompatibleWithConfigurationCache("Reads Android extension metadata at execution time.")
+    doLast {
+        println("VERSION_NAME=${android.defaultConfig.versionName}")
+        println("VERSION_CODE=${android.defaultConfig.versionCode}")
+        println("APPLICATION_ID=${android.defaultConfig.applicationId}")
+        println("COMPILE_SDK=${android.compileSdk}")
+        println("MIN_SDK=${android.defaultConfig.minSdk}")
+        println("TARGET_SDK=${android.defaultConfig.targetSdk}")
+        println("AGP_VERSION=${libs.versions.agp.get()}")
+        println("KOTLIN_VERSION=${libs.versions.kotlin.get()}")
+    }
+}
